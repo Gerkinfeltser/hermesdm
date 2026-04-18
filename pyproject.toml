@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermesdm"
+version = "0.1.0"
+description = "AI Dungeon Master multiplayer via Telegram — D&D 5e game engine with LLM narration"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    {name = "Hermes Agent", email = "hermes@nousresearch.com"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Game Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "python-telegram-bot>=20.0",
+    "aiohttp>=3.9.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+]
+
+[project.scripts]
+hermesdm = "bot.telegram_handler:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["bot*", "dm*", "state*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.coverage.run]
+source = ["bot", "dm", "state"]
+omit = ["*/tests/*", "*/__main__.py"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_ignores = true
+ignore_missing_imports = true

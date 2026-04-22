@@ -345,6 +345,6 @@ mypy bot dm --ignore-missing-imports
 
 ## Author
 
-**Sherman** — [@TheShugarBoy](https://twitter.com/TheShugarBoy)
+**Shugar** — [@TheShugarBoy](https://twitter.com/TheShugarBoy)
 
 Built with Python, Telegram Bots API, and MiniMax LLM.

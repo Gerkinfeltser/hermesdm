@@ -1,3 +1,5 @@
+<img width="1024" height="1024" alt="5134172295139101640" src="https://github.com/user-attachments/assets/1e18c38e-d4ed-4a4d-a51b-c0c3b2ab892b" />
+
 # HermesDM — AI Dungeon Master via Telegram
 
 > Your AI-powered Dungeon Master that runs D&D 5e campaigns directly in Telegram group chats. Real dice, character sheets, combat tracking, and LLM-generated narration.

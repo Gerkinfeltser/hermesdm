@@ -1,4 +1,5 @@
-<img width="240" height="240" alt="5134172295139101640" src="https://github.com/user-attachments/assets/1e18c38e-d4ed-4a4d-a51b-c0c3b2ab892b" />
+<img width="1248" height="832" alt="Generated Image April 22, 2026 - 12_18PM" src="https://github.com/user-attachments/assets/64f3a579-b32d-4eba-acd0-0c7ae6ebe24c" />
+
 
 # HermesDM — AI Dungeon Master via Telegram
 

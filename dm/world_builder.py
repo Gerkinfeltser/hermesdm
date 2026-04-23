@@ -187,7 +187,7 @@ def generate_npcs(count: int = 3) -> dict:
     return npcs
 
 
-def generate_setup_with_ai(description: str, tone: str = "serious", setting: str = "fantasy") -> dict:
+def generate_setup_with_ai(description: str, tone: str = "serious", setting: str = "fantasy", pacing_level: str = "medium") -> dict:
     """
     Generate campaign setup (premise, hook, lore, factions, NPCs) using AI.
     Falls back to build_world() templates if AI is unavailable.
@@ -233,6 +233,11 @@ Generá:
 6. NPCs iniciales: 2-3 NPCs relevantes con nombre, rol, y una línea de diálogo característica
 7. Clases temáticas: 3-5 nombres de clases de PJ que encajen en este setting (ej: para un puerto pirata podrían ser Corsario, Navegante, Contrabandista, Bucanero, Oficial). NO uses las clases default de D&D. Inventá nombres que hagan sentido para la descripción del DM.
 8. Equipo inicial temático: 3-5 objetos de starting equipment que encajen en el setting (ej: para horror: linterna de aceite, crucifijo de plata, diario manchado, laudano, daga de obsidiana). Cada item debe tener nombre, descripción corta de 1 línea, y si es consumible (true/false).
+9. Story arc: un arco narrativo con milestones. Según el pacing_level ({pacing_level}), generá:
+   - "short": 4 milestones (hook, rising_action, climax, resolution)
+   - "medium": 5 milestones (hook, rising_action_1, rising_action_2, climax, resolution)
+   - "long": 7 milestones (hook, rising_action_1, midpoint, rising_action_2, rising_action_3, climax, resolution)
+   Cada milestone necesita: id, type, description (qué debe pasar narrativamente en esa etapa, 1-2 oraciones).
 
 Respondé en español, en JSON con este formato exacto:
 {{
@@ -244,7 +249,15 @@ Respondé en español, en JSON con este formato exacto:
   "factions": {{ "nombre_faccion": "ESTADO", ... }},
   "npcs": [{{ "name": "...", "role": "...", "dialogue": "..." }}, ...],
   "classes": ["Clase1", "Clase2", "Clase3"],
-  "starting_equipment": [{{ "name": "...", "description": "...", "is_consumable": false }}, ...]
+  "starting_equipment": [{{ "name": "...", "description": "...", "is_consumable": false }}, ...],
+  "story_arc": {{
+    "pacing_level": "{pacing_level}",
+    "milestones": [
+      {{ "id": "hook", "type": "hook", "description": "..." }},
+      {{ "id": "rising_action", "type": "rising_action", "description": "..." }},
+      ...
+    ]
+  }}
 }}
 No escribas nada más que el JSON."""
 
@@ -271,6 +284,18 @@ No escribas nada más que el JSON."""
         if not classes:
             classes = _generate_themed_classes(setting, description)
 
+        # Build story arc from AI response
+        story_arc_data = parsed.get("story_arc")
+        if story_arc_data:
+            from dm.story_arc import create_story_arc_from_ai_response
+            story_arc = create_story_arc_from_ai_response(
+                pacing_level=story_arc_data.get("pacing_level", pacing_level),
+                ai_milestones=story_arc_data.get("milestones", []),
+            )
+        else:
+            from dm.story_arc import create_default_story_arc
+            story_arc = create_default_story_arc(pacing_level)
+
         return {
             "description": description,
             "premise": parsed.get("premise", ""),
@@ -287,6 +312,7 @@ No escribas nada más que el JSON."""
                 "npcs": parsed.get("npcs", []),
             },
             "starting_equipment": parsed.get("starting_equipment", []),
+            "story_arc": story_arc.to_dict(),
         }
 
     except Exception as e:
@@ -360,6 +386,9 @@ No escribas nada más que el JSON."""
         fallback = build_world(setting)
         factions = fallback["world"].get("factions", {})
 
+        from dm.story_arc import create_default_story_arc
+        fallback_arc = create_default_story_arc(pacing_level)
+
         return {
             "description": description,
             "premise": premise,
@@ -376,6 +405,7 @@ No escribas nada más que el JSON."""
                 "npcs": fallback_npcs,
             },
             "starting_equipment": fallback_items,
+            "story_arc": fallback_arc.to_dict(),
         }
 
 

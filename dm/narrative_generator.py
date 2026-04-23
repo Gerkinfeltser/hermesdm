@@ -392,6 +392,7 @@ class NarrativeGenerator:
         scene_type: SceneType,
         context: dict | None = None,
         language: Language = Language.ES,
+        milestone_context: dict | None = None,
     ) -> dict:
         """
         Generate a narrative scene based on current state and scene type.
@@ -401,6 +402,7 @@ class NarrativeGenerator:
             scene_type: One of SceneType enum values
             context: Optional overrides for template variables
             language: Language for narrative templates (default: ES)
+            milestone_context: Optional dict from PacingEngine with milestone info
 
         Returns:
             dict with keys:
@@ -414,7 +416,7 @@ class NarrativeGenerator:
 
         # LLM mode: call AI provider
         if self.llm_client is not None:
-            narrative = self._generate_with_llm(scene_type, full_context, language)
+            narrative = self._generate_with_llm(scene_type, full_context, language, milestone_context)
             triggered_image = self._should_trigger_image(scene_type, full_context)
             return {
                 "narrative": narrative,
@@ -904,7 +906,8 @@ Requisitos:
             self._system_prompt = None
 
     def _generate_with_llm(
-        self, scene_type: SceneType, context: dict, language: Language
+        self, scene_type: SceneType, context: dict, language: Language,
+        milestone_context: dict | None = None,
     ) -> str:
         """
         Use the LLM client to generate a narrative scene.
@@ -920,13 +923,40 @@ Requisitos:
 
         scene_type_str = scene_type.value.lower().replace("_", " ")
 
+        # Build milestone context addition if provided
+        milestone_section = ""
+        if milestone_context:
+            cm_id = milestone_context.get("current_milestone_id", "")
+            cm_type = milestone_context.get("current_milestone_type", "")
+            cm_desc = milestone_context.get("current_milestone_description", "")
+            scenes_in = milestone_context.get("scenes_in_milestone", 0)
+            max_scenes = milestone_context.get("max_scenes", 5)
+            pressure = milestone_context.get("progress_pressure", 0.0)
+
+            milestone_section = (
+                f"\n═══ PROGRESO DE LA HISTORIA ═══\n"
+                f"Etapa actual: {cm_id} ({cm_type})\n"
+                f"Objetivo: {cm_desc}\n"
+                f"Escenas en esta etapa: {scenes_in}/{max_scenes}\n"
+            )
+            if pressure >= 0.8:
+                milestone_section += "⚠️ Esta etapa debe resolverse AHORA. Avanza la trama.\n"
+            elif pressure >= 0.5:
+                milestone_section += "⏳ La trama debe avanzar hacia el siguiente hito.\n"
+            if cm_type == "climax":
+                milestone_section += "🎭 CLIMAX: Todo está en juego. Narrá con intensidad máxima.\n"
+            elif cm_type == "resolution":
+                milestone_section += "🌅 RESOLUCIÓN: Revelá las consecuencias y cerrá con fuerza.\n"
+            milestone_section += "═══\n"
+
         user_prompt = (
             f"You are the Dungeon Master narrating a D&D Fifth Edition game.\n"
             f"Generate a vivid, {mood} narrative for a {scene_type_str} scene.\n\n"
             f"Location: {location}\n"
             f"Characters present: {characters}\n"
             f"NPCs present: {npcs}\n"
-            f"Recent events: {recent}\n\n"
+            f"Recent events: {recent}\n"
+            f"{milestone_section}\n"
             "Requirements:\n"
             "- 2-4 sentences maximum\n"
             "- End with an open SITUATION that invites action (never end with a question mark)\n"

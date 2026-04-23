@@ -514,13 +514,29 @@ async def cmd_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         description = " ".join(context.args).strip() if context.args else ""
 
+        # Extract pacing level from description
+        pacing_level = "medium"
+        if "--short" in description or "--pacing short" in description:
+            pacing_level = "short"
+            description = description.replace("--short", "").replace("--pacing short", "").strip()
+        elif "--long" in description or "--pacing long" in description:
+            pacing_level = "long"
+            description = description.replace("--long", "").replace("--pacing long", "").strip()
+        elif "--medium" in description or "--pacing medium" in description:
+            pacing_level = "medium"
+            description = description.replace("--medium", "").replace("--pacing medium", "").strip()
+
         if not description:
             await update.message.reply_text(
                 "⚠️ *Setup de Campaña*\n\n"
                 "Usá: `/setup <descripción>`\n\n"
                 "Ejemplos:\n"
-                "- `/setup dark fantasy en un puerto corrupto con contrabandistas`\n"
+                "- `/setup dark fantasy en un puerto corrupto`\n"
                 "- `/setup oneshot de terror en una mansión abandonada`\n\n"
+                "Opciones de duración:\n"
+                "- `--short` → ~5 sesiones (one-shot)\n"
+                "- `--medium` → ~10 sesiones (default)\n"
+                "- `--long` → ~20 sesiones (campaña épica)\n\n"
                 "Incluí: tono, setting, tipo de aventura.",
                 parse_mode=ParseMode.MARKDOWN,
             )
@@ -533,6 +549,7 @@ async def cmd_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "description": description,
             "tone": "serious",
             "setting_type": "fantasy",
+            "pacing_level": pacing_level,
         }
         chat_data["_hermes_state"] = cs
 
@@ -540,7 +557,8 @@ async def cmd_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         gen_msg = await update.message.reply_text("🎲 Generando con AI...")
 
         try:
-            setup_data = generate_setup_with_ai(description)
+            setup_data = generate_setup_with_ai(description, pacing_level=pacing_level)
+            setup_data["pacing_level"] = pacing_level
             cs.pending_setup = setup_data
             cs.setup_state = "preview"
             chat_data["_hermes_state"] = cs
@@ -872,6 +890,16 @@ def _format_setup_preview(setup_data: dict) -> str:
             for eq in equipment
         )
 
+    # Story arc preview
+    story_arc = setup_data.get("story_arc", {})
+    arc_str = ""
+    if story_arc:
+        pacing = story_arc.get("pacing_level", "medium")
+        milestones = story_arc.get("milestones", [])
+        arc_str = f"\n📜 *Arco narrativo* ({pacing}, {len(milestones)} hitos):\n"
+        for i, m in enumerate(milestones, 1):
+            arc_str += f"   {i}. {m.get('id', '?')}: {m.get('description', '')[:50]}...\n"
+
     return (
         f"🎭 *PREVIEW DE CAMPAÑA*\n"
         f"{'━'*20}\n\n"
@@ -887,6 +915,7 @@ def _format_setup_preview(setup_data: dict) -> str:
         f"{'⚡ *Facciones:* ' + factions_str if factions_str else ''}\n"
         f"{'👥 *NPCs:*'}{chr(10) + npcs_str if npcs_str else ''}{chr(10)}"
         f"{'🎒 *Equipo inicial:*'}{chr(10) + equipment_str if equipment_str else ''}"
+        f"{arc_str}"
     )
 
 
@@ -1011,6 +1040,12 @@ async def cmd_begin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         # Mark adventure as started
         state["adventure_started"] = True
+
+        # Transfer story_arc from setup to state if present
+        setup_arc = setup.get("story_arc")
+        if setup_arc and state.get("story_arc") is None:
+            state["story_arc"] = setup_arc
+
         state.setdefault("scenes", []).append({
             "type": "opening",
             "narrative": narrative,
@@ -3581,9 +3616,38 @@ async def _handle_player_action(update: Update, context: ContextTypes.DEFAULT_TY
         # ── Route action through ActionRouter ─────────────────────────────────
         from adapters.mode_b.action_router import ActionRouter
         from bot.dice_animation import animate_dice_roll
+        from dm.pacing_engine import create_pacing_engine
+
+        # Create pacing engine and decide scene type
+        pacing = create_pacing_engine(state)
+        scene_type = pacing.get_next_scene_type(action_text)
+        milestone_ctx = pacing.get_milestone_context()
 
         router = ActionRouter(state=state, character=char)
-        result = router.route(update, action_text)
+        result = router.route(update, action_text, scene_type_override=scene_type, milestone_context=milestone_ctx)
+
+        # ── Check milestone advancement ────────────────────────────────────────
+        try:
+            if pacing.check_milestone_advance(result.narrative):
+                from datetime import datetime as _dt
+                pacing.arc.advance_milestone(timestamp=_dt.utcnow().isoformat())
+                # If we just advanced, get new milestone info
+                new_ctx = pacing.get_milestone_context()
+                if not new_ctx.get("campaign_complete"):
+                    result.narrative += (
+                        f"\n\n🎯 *Avance de trama:* Pasás a '{new_ctx['current_milestone_id']}' — "
+                        f"{new_ctx['current_milestone_description'][:60]}..."
+                    )
+        except Exception:
+            log.exception("Pacing milestone check failed")
+
+        # Record this scene in the arc
+        pacing.record_scene(scene_type)
+
+        # Save updated story_arc back to state
+        state["story_arc"] = pacing.arc.to_dict()
+        from state.state_manager import save_state
+        save_state(cs.active_campaign, state)
 
         # ── Send initial message to get message_id ───────────────────────────
         initial_text = (

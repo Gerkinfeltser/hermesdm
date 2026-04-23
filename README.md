@@ -1,4 +1,3 @@
-<p align="center">
 ## 🎲 HermesDM — Tu Dungeon Master con IA en Telegram
 
 <p align="center">

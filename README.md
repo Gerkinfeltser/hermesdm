@@ -1,8 +1,8 @@
 # 🎲 HermesDM — Tu Dungeon Master con IA en Telegram
 
 <p align="center">
-<img width="600" alt="HermesDM Banner" src="https://i.imgur.com/placeholder-banner.png"/>
-<br/>
+<img width="1248" height="832" alt="Generated Image April 22, 2026 - 12_18PM" src="https://github.com/user-attachments/assets/c23d3a5e-082c-4f64-9502-0aae109fee04" />
+
 
 > **¿Quién necesita D&D Beyond cuando podés tener un DM con IA corriendo en tu grupo de Telegram?**
 

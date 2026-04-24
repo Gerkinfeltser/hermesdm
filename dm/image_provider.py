@@ -612,6 +612,73 @@ class FalProvider(ImageProvider):
         return self._result(output_path, prompt, elapsed)
 
 
+# ── Fallback Provider ──────────────────────────────────────────────────────────
+
+class FallbackProvider(ImageProvider):
+    """
+    Tries multiple providers in sequence until one succeeds.
+
+    Each provider gets 2 attempts with a 15-second timeout.
+    If all fail, raises ImageGenerationError with details.
+    """
+
+    name = "fallback"
+
+    def __init__(
+        self,
+        primary: ImageProvider,
+        fallbacks: list[ImageProvider] | None = None,
+        attempts_per_provider: int = 2,
+        timeout_seconds: float = 15.0,
+    ):
+        self.primary = primary
+        self.fallbacks = fallbacks or []
+        self.attempts = attempts_per_provider
+        self.timeout = timeout_seconds
+        self._last_provider: str | None = None
+
+    async def generate(
+        self,
+        prompt: str,
+        scene_type: str,
+        **kwargs: Any,
+    ) -> ImageResult:
+        providers = [self.primary, *self.fallbacks]
+        errors: list[str] = []
+
+        for prov in providers:
+            for attempt in range(1, self.attempts + 1):
+                try:
+                    # Pass timeout via kwargs if provider supports it
+                    prov_kwargs = dict(kwargs)
+                    if hasattr(prov, "timeout"):
+                        prov_kwargs.setdefault("timeout", int(self.timeout))
+
+                    result = await prov.generate(prompt, scene_type, **prov_kwargs)
+                    self._last_provider = prov.name
+                    return result
+                except Exception as e:
+                    err = f"{prov.name} attempt {attempt}/{self.attempts}: {e}"
+                    errors.append(err)
+                    import logging
+                    logging.warning(f"[FallbackProvider] {err}")
+                    # Short sleep before retry
+                    if attempt < self.attempts:
+                        import asyncio
+                        await asyncio.sleep(1.0)
+
+        # All providers exhausted
+        raise ImageGenerationError(
+            f"All providers failed ({len(errors)} attempts). "
+            f"Last: {errors[-1] if errors else 'unknown'}"
+        )
+
+    @property
+    def last_provider_used(self) -> str | None:
+        """Return the name of the provider that last succeeded."""
+        return self._last_provider
+
+
 # ── Factory ───────────────────────────────────────────────────────────────────
 
 _PROVIDER_CLASSES: dict[str, type[ImageProvider]] = {

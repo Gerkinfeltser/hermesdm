@@ -53,6 +53,12 @@ from bot.telegram_handler import (
     build_app,
     settings,
 )
+from bot.version import (
+    Version,
+    get_version,
+    format_full,
+    format_startup,
+)
 from bot.turn_manager import (
     Combatant,
     CombatState,
@@ -120,4 +126,9 @@ __all__ = [
     "Settings",
     "settings",
     "build_app",
+    # version
+    "Version",
+    "get_version",
+    "format_full",
+    "format_startup",
 ]

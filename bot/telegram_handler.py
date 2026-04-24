@@ -67,6 +67,8 @@ from bot.turn_manager import (
 )
 from dm.image_prompt_builder import build_closure_image_prompt
 from dm.narrative_generator import Language, NarrativeGenerator, SceneType
+from dm.provider_client import get_provider
+from dm.action_narrator import get_narrator
 from state.state_manager import (
     append_history,
     campaign_exists,
@@ -77,6 +79,26 @@ from state.state_manager import (
 )
 
 log = logging.getLogger(__name__)
+
+# ------------------------------------------------------------------
+# NarrativeGenerator singleton (with LLM when available)
+# ------------------------------------------------------------------
+
+_narrative_generator: NarrativeGenerator | None = None
+
+
+def _get_narrative_generator() -> NarrativeGenerator:
+    """Return a NarrativeGenerator with LLM client connected."""
+    global _narrative_generator
+    if _narrative_generator is None:
+        try:
+            client = get_provider("minimax")
+            _narrative_generator = NarrativeGenerator(llm_client=client)
+        except Exception:
+            log.warning("Failed to connect LLM client; falling back to template mode")
+            _narrative_generator = NarrativeGenerator()
+    return _narrative_generator
+
 
 # ------------------------------------------------------------------
 # Config
@@ -302,14 +324,48 @@ _AUTO_IMAGE_HANDLER: ImageEventHandler | None = None  # Lazy init
 
 
 def _get_image_handler() -> ImageEventHandler:
-    """Get or create the global ImageEventHandler singleton."""
+    """Get or create the global ImageEventHandler singleton with fallback chain."""
     global _AUTO_IMAGE_HANDLER
     if _AUTO_IMAGE_HANDLER is None:
         from dm.image_event_handler import ImageEventHandler
-        from dm.image_provider import get_provider
+        from dm.image_provider import FallbackProvider, get_provider
 
-        provider_name = os.environ.get("IMAGE_PROVIDER", "pollinations")
-        provider = get_provider(provider_name)
+        # Build provider chain
+        providers: list[Any] = []
+
+        # Primary: Pollinations (free)
+        try:
+            providers.append(get_provider("pollinations", timeout=15))
+        except Exception:
+            pass
+
+        # Fallback 1: fal.ai (high quality, needs FAL_KEY)
+        if os.environ.get("FAL_KEY"):
+            try:
+                providers.append(get_provider("fal", timeout=30))
+            except Exception:
+                pass
+
+        # Fallback 2: MiniMax (if API key available)
+        if os.environ.get("MINIMAX_API_KEY"):
+            try:
+                providers.append(get_provider("minimax", timeout=30))
+            except Exception:
+                pass
+
+        if len(providers) >= 2:
+            provider = FallbackProvider(
+                primary=providers[0],
+                fallbacks=providers[1:],
+                attempts_per_provider=2,
+                timeout_seconds=15.0,
+            )
+        elif providers:
+            provider = providers[0]
+        else:
+            # No providers available — create disabled handler
+            provider = get_provider("pollinations")
+
         _AUTO_IMAGE_HANDLER = ImageEventHandler(provider=provider, enabled=True)
     return _AUTO_IMAGE_HANDLER
 
@@ -330,6 +386,14 @@ async def _maybe_send_scene_image(
 
     try:
         handler = _get_image_handler()
+
+        # Check campaign settings
+        chat_data = context.chat_data
+        cs: ChatState = chat_data.get("_hermes_state", ChatState())
+        if cs.active_campaign:
+            settings = get_settings(cs.active_campaign)
+            if not settings.image_generation:
+                return  # Images disabled for this campaign
 
         # Determine scene_type from ActionResult
         scene_type = "other"
@@ -360,12 +424,19 @@ async def _maybe_send_scene_image(
         if image_result is None or not _os.path.exists(image_result.path):
             return
 
+        # Detect which provider actually succeeded (fallback-aware)
+        provider_name = image_result.provider
+        if hasattr(handler.provider, "last_provider_used"):
+            actual = handler.provider.last_provider_used
+            if actual:
+                provider_name = actual
+
         # Send to Telegram
         with open(image_result.path, "rb") as f:
             await context.bot.send_photo(
                 chat_id=chat_id,
                 photo=f,
-                caption=f"🎨 *{image_result.provider_used}* — _Generada automaticamente_",
+                caption=f"🎨 *{provider_name}* — _Generada automaticamente_",
                 parse_mode=ParseMode.MARKDOWN,
             )
 
@@ -462,6 +533,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             /roll <dados> — Tirar dados (ej: `/roll 2d6+3`)
             /audit — Ver log de auditoría de la campaña
             /configuracion — Configuración de la campaña
+            /version — Versión del bot
             /help — Mostrar este mensaje
         """).strip()
         await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
@@ -471,6 +543,23 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await update.message.reply_text(f"Error: {e}")
         except Exception:
             pass  # Already failing, give up silently
+
+
+async def cmd_version(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /version — show HermesDM version info."""
+    try:
+        from bot.version import get_version, format_full
+        v = get_version()
+        await update.message.reply_text(
+            format_full(v),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+    except Exception:
+        log.exception("cmd_version error")
+        try:
+            await update.message.reply_text("Error mostrando versión.")
+        except Exception:
+            pass
 
 
 @with_audit("cmd_newgame")
@@ -1025,7 +1114,7 @@ async def cmd_begin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         }
 
         # Generate opening narrative
-        ng = NarrativeGenerator()
+        ng = _get_narrative_generator()
         settings = get_settings(cs.active_campaign)
         language = settings.language
 
@@ -1236,6 +1325,24 @@ async def cmd_roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     dmg_result = apply_damage(char.hp, resolved["damage"])
                     note += f"\n{dmg_result['hp_lost']} damage applied to {attack['attacker_name']}"
 
+            # ── LLM narrative for notable attacks ──
+            if resolved["hit"] or resolved.get("critical"):
+                narrator = get_narrator()
+                campaign = load_state(cs.active_campaign) if cs.active_campaign else {}
+                location = campaign.get("campaign", {}).get("current_location", "")
+                narrative = narrator.narrate_attack(
+                    attacker=attack["attacker_name"],
+                    defender=attack["defender_name"],
+                    weapon=attack.get("weapon", "sword"),
+                    attack_roll=attack_roll,
+                    hit=resolved["hit"],
+                    damage=resolved.get("damage"),
+                    critical=resolved.get("critical", False),
+                    location=location,
+                )
+                if narrative:
+                    note += f"\n\n📝 {narrative}"
+
             chat_data["_hermes_state"] = cs
             await update.message.reply_text(note, parse_mode=ParseMode.MARKDOWN)
             return
@@ -1257,6 +1364,23 @@ async def cmd_roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
 
             note = f"✨ *Spell Result*\n{spell_result['note']}"
+
+            # ── LLM narrative for spell casting ──
+            narrator = get_narrator()
+            campaign = load_state(cs.active_campaign) if cs.active_campaign else {}
+            location = campaign.get("campaign", {}).get("current_location", "")
+            spell_narrative = narrator.narrate_spell(
+                caster=spell_info.get("caster_name", "Unknown"),
+                spell_name=spell_info["spell_name"],
+                target=spell_info.get("target", ""),
+                effect_description=spell_result.get("effect", ""),
+                damage=spell_result.get("damage"),
+                saved=spell_result.get("saved"),
+                location=location,
+            )
+            if spell_narrative:
+                note += f"\n\n📝 {spell_narrative}"
+
             chat_data["_hermes_state"] = cs
             await update.message.reply_text(note, parse_mode=ParseMode.MARKDOWN)
             return
@@ -1294,6 +1418,23 @@ async def cmd_roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     + f" = *{total}*\n"
                     f"→ *{'SUCCESS' if success else 'FAILURE'}* (by {margin:+d})"
                 )
+
+                # ── LLM narrative for skill checks ──
+                if success or margin > -3:
+                    narrator = get_narrator()
+                    campaign = load_state(cs.active_campaign) if cs.active_campaign else {}
+                    location = campaign.get("campaign", {}).get("current_location", "")
+                    skill_narrative = narrator.narrate_skill(
+                        character=char.name,
+                        skill=check_info["skill"],
+                        dc=dc,
+                        roll_total=total,
+                        success=success,
+                        margin=margin,
+                        location=location,
+                    )
+                    if skill_narrative:
+                        note += f"\n\n📝 {skill_narrative}"
             else:
                 note = f"Unknown skill: {check_info['skill']}"
 
@@ -2032,20 +2173,54 @@ async def cmd_talk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         char = cs.character_for(player_name)
         speaker = char.name if char else "Unknown"
 
-        # Simple disposition-based response (the DM would narrate this in a full implementation)
-        disp = npc.get("disposition_value", 0)
-        if disp > 50:
-            response_tone = "warm and friendly"
-        elif disp < -50:
-            response_tone = "cold and hostile"
-        else:
-            response_tone = "cautious and neutral"
+        # ── LLM-powered NPC response (with memory and secrets) ──
+        narrator = get_narrator()
+        npc_store = _get_npc_store(cs.active_campaign)
+        npc_record = npc_store.find_by_name(npc["name"])
 
-        reply = (
-            f'*You say to {npc["name"]}:* "{message}"\n\n'
-            f"*{npc['name']} ({npc['role']}) responds* — {response_tone}:\n"
-            f"_{npc.get('dialogue_style', 'They look at you curiously.')}_"
+        # Build context from persistent NPC data
+        npc_memory_values = []
+        npc_secret = None
+        if npc_record:
+            npc_memory_values = [m.value for m in npc_record.memory]
+            npc_secret = npc_record.secret
+
+        # Get recent history for context
+        recent_history = [h.get("event", "") for h in state.get("history", [])[-10:]]
+
+        npc_response = narrator.narrate_npc_response(
+            npc_name=npc["name"],
+            npc_role=npc.get("role", npc.get("npc_role", "NPC")),
+            npc_personality=npc.get("personality", ""),
+            npc_memory=npc_memory_values,
+            npc_secrets=[npc_secret] if npc_secret else [],
+            disposition=npc.get("disposition_value", 0),
+            player_name=speaker,
+            player_message=message,
+            location=state.get("campaign", {}).get("current_location", ""),
+            recent_history=recent_history,
         )
+
+        if npc_response:
+            reply = (
+                f'*You say to {npc["name"]}:* "{message}"\n\n'
+                f"💬 *{npc['name']}* responde:\n"
+                f"_{npc_response}_"
+            )
+        else:
+            # Fallback to simple template
+            disp = npc.get("disposition_value", 0)
+            if disp > 50:
+                response_tone = "cálido y amigable"
+            elif disp < -50:
+                response_tone = "frío y hostil"
+            else:
+                response_tone = "cauteloso y neutral"
+            reply = (
+                f'*You say to {npc["name"]}:* "{message}"\n\n'
+                f"💬 *{npc['name']}* — {response_tone}:\n"
+                f"_{npc.get('dialogue_style', 'Te mira con curiosidad.')}_"
+            )
 
         # Record in history
         state["history"].append(
@@ -2549,7 +2724,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         # Generate opening scene
-        ng = NarrativeGenerator()
+        ng = _get_narrative_generator()
         settings = get_settings(cs.active_campaign)
         language = settings.language
 
@@ -2826,7 +3001,7 @@ async def cmd_end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         # Generate epilogue via NarrativeGenerator
-        ng = NarrativeGenerator()
+        ng = _get_narrative_generator()
         closure = ng.generate_closure(state, language=Language.ES)
         campaign_name = state.get("campaign", {}).get("name", "La aventura")
         epilogue_text = f"🎭 *EPÍLOGO — {campaign_name}*\n\n{closure['narrative']}"
@@ -3212,12 +3387,8 @@ async def _turn_timer_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
 async def cmd_imagen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handle /imagen — genera una imagen de la escena actual.
-    Si image_generation está desactivado, muestra un mensaje informativo.
-    También se llama automáticamente después de cada escena nueva si está activado.
+    Usa el mismo pipeline unificado que la generación automática.
     """
-    import os
-    import subprocess
-
     try:
         chat_data = context.chat_data
         cs: ChatState = chat_data.get("_hermes_state", ChatState())
@@ -3232,97 +3403,105 @@ async def cmd_imagen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         if not settings.image_generation:
             await update.message.reply_text(
                 "🎨 *Generación de imágenes desactivada.*\n\n"
-                "Usa `/configuracion imagen on` para activar.\n"
-                "Cuando esté activada, cada escena nueva "
-                "generará una imagen automáticamente.",
+                "Usa `/configuracion imagen on` para activar.",
                 parse_mode=ParseMode.MARKDOWN,
             )
             return
 
         await update.message.reply_text("🎨 Generando imagen de la escena...")
 
-        # Obtener información de la escena actual
+        # Load campaign state for context
+        state = load_state(cs.active_campaign)
         location = ""
+        narrative = ""
+        if state:
+            campaign = state.get("campaign", {})
+            location = campaign.get("current_location", "")
+            # Use recent history for narrative context
+            history = state.get("history", [])
+            if history:
+                narrative = history[-1].get("event", "") if isinstance(history[-1], dict) else str(history[-1])
+
+        # Build rich prompt via ImageEventHandler pipeline
+        from dm.image_event_handler import ImageContext, build_scene_prompt
+
+        prompt = build_scene_prompt(
+            narrative=narrative or f"a fantasy {location} scene" if location else "a fantasy adventure scene",
+            scene_type="other",
+            genre="fantasy",
+            characters=[c.name for c in cs.characters.values()] if cs.characters else [],
+            mood="dramatic",
+        )
+
+        # Generate using unified provider pipeline
+        handler = _get_image_handler()
+        ctx = ImageContext(
+            scene_type="other",
+            narrative=narrative or prompt,
+            genre="fantasy",
+            characters=[c.name for c in cs.characters.values()] if cs.characters else [],
+            mood="dramatic",
+            location_name=location or None,
+        )
+
+        # Override cooldown for manual /imagen requests
+        handler._last_image_time = 0
+
+        image_result = await handler.maybe_generate(ctx)
+
+        if image_result is None:
+            await update.message.reply_text(
+                "⚠️ No se pudo generar la imagen. "
+                "Los servidores de generación pueden estar saturados. Intentá de nuevo."
+            )
+            return
+
+        import os as _os
+        if not _os.path.exists(image_result.path):
+            await update.message.reply_text(
+                "⚠️ La imagen generada no se guardó correctamente."
+            )
+            return
+
+        file_size = _os.path.getsize(image_result.path)
+        if file_size < 5000:
+            await update.message.reply_text(
+                "⚠️ La imagen generada parece estar corrupta. Intentá de nuevo."
+            )
+            return
+
+        # Detect provider used
+        provider_name = image_result.provider
+        if hasattr(handler.provider, "last_provider_used"):
+            actual = handler.provider.last_provider_used
+            if actual:
+                provider_name = actual
+
+        # Send image
+        with open(image_result.path, "rb") as f:
+            await update.message.reply_photo(
+                photo=f,
+                caption=f"🎨 *{location or 'Escena'}* — _{provider_name}_",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+
+        # Save reference to state
         try:
             state = load_state(cs.active_campaign)
             if state:
-                location = state.get("campaign", {}).get("current_location", "")
-        except Exception:
-            pass
-
-        # Construir prompt desde la ubicación
-        if location:
-            prompt = f"a fantasy {location} scene, cinematic, D&D 5e art style"
-        else:
-            prompt = "a fantasy adventure scene, cinematic, D&D 5e art style"
-
-        # Generar imagen
-        venv_python = "/home/hermes/hermesdm/venv/bin/python3"
-        script_path = "/home/hermes/scripts/image_from_scene.py"
-        output_path = f"/tmp/hermesdm_imagen_{cs.active_campaign[:8]}.png"
-
-        os.makedirs("/tmp/hermesdm", exist_ok=True)
-
-        try:
-            result = subprocess.run(
-                [
-                    venv_python,
-                    script_path,
-                    prompt,
-                    "--output",
-                    output_path,
-                    "--timeout",
-                    "60",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=70,
-            )
-
-            if result.returncode == 0 and os.path.exists(output_path):
-                file_size = os.path.getsize(output_path)
-                if file_size > 5000:
-                    # Enviar imagen al chat
-                    with open(output_path, "rb") as f:
-                        await update.message.reply_photo(
-                            photo=f,
-                            caption=f"🎨 *{location or 'Escena'}*\n_Generada via Pollinations_",
-                            parse_mode=ParseMode.MARKDOWN,
-                        )
-                    # Guardar referencia en el estado
-                    try:
-                        state = load_state(cs.active_campaign)
-                        if state:
-                            generated = state.get("generated_images", [])
-                            generated.append(
-                                {
-                                    "path": output_path,
-                                    "prompt": prompt,
-                                    "location": location,
-                                }
-                            )
-                            state["generated_images"] = generated[-10:]  # keep last 10
-                            save_state(cs.active_campaign, state)
-                    except Exception:
-                        pass  # No guardar estado no es crítico
-                else:
-                    await update.message.reply_text(
-                        "⚠️ La imagen generada parece estar corrupta. "
-                        "Intentá de nuevo en unos segundos."
-                    )
-            else:
-                await update.message.reply_text(
-                    f"⚠️ Error generando imagen:\n`{result.stderr[:200]}`",
-                    parse_mode=ParseMode.MARKDOWN,
+                generated = state.get("generated_images", [])
+                generated.append(
+                    {
+                        "path": image_result.path,
+                        "prompt": prompt,
+                        "location": location,
+                        "provider": provider_name,
+                    }
                 )
-        except subprocess.TimeoutExpired:
-            await update.message.reply_text(
-                "⚠️ Timeout generando imagen (70s). "
-                "El servidor de Pollinations puede estar lento. "
-                "Intentá de nuevo."
-            )
-        except Exception as e:
-            await update.message.reply_text(f"⚠️ Error: {e}")
+                state["generated_images"] = generated[-10:]  # keep last 10
+                save_state(cs.active_campaign, state)
+        except Exception:
+            pass  # Non-critical
 
     except Exception as e:
         log.exception("cmd_imagen error")
@@ -3345,6 +3524,9 @@ def build_app() -> Application:
     # HermesDM game commands — filtered to group only (if ALLOWED_GROUP_ID is set)
     app.add_handler(
         CommandHandler("help", cmd_help, filters=filters.Chat(settings.ALLOWED_GROUP_ID) if settings.ALLOWED_GROUP_ID else None)
+    )
+    app.add_handler(
+        CommandHandler("version", cmd_version, filters=filters.Chat(settings.ALLOWED_GROUP_ID) if settings.ALLOWED_GROUP_ID else None)
     )
     app.add_handler(
         CommandHandler("newgame", cmd_newgame, filters=filters.Chat(settings.ALLOWED_GROUP_ID) if settings.ALLOWED_GROUP_ID else None)
@@ -3920,7 +4102,19 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
     )
+    from bot.version import get_version, format_startup
+    v = get_version()
+    log.info(f"HermesDM starting — version={v} build={v.build} bundled={v.bundled}")
     app = build_app()
+    # Announce in the group if ALLOWED_GROUP_ID is set
+    try:
+        from bot.telegram_handler import settings
+        if settings.ALLOWED_GROUP_ID:
+            startup_msg = format_startup(v, campaign_active=False)
+            # Defer to asyncio — app isn't running yet, log only
+            log.info(f"Startup announcement: {startup_msg}")
+    except Exception:
+        pass
     log.info("HermesDM bot starting...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 

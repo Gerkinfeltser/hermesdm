@@ -29,6 +29,7 @@ class LLMResponse:
     raw: Any = None
     model: str | None = None
     usage: dict | None = None
+    latency_ms: float | None = None
 
 
 class LLMClient(ABC):
@@ -99,7 +100,11 @@ class MiniMaxProvider(LLMClient):
         temperature: float = 0.8,
     ) -> LLMResponse:
         import json
+        import time
         import urllib.request
+
+        # ── Audit: start timing ──────────────────────────────────────────
+        start_ts = time.perf_counter()
 
         messages = []
         if system:
@@ -124,16 +129,102 @@ class MiniMaxProvider(LLMClient):
             method="POST",
         )
 
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            result = json.load(resp)
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                result = json.load(resp)
+        except Exception as exc:
+            # ── Audit: log error ───────────────────────────────────────
+            self._log_llm(
+                prompt=prompt,
+                system=system,
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                latency_ms=(time.perf_counter() - start_ts) * 1000,
+                error=str(exc),
+            )
+            raise
 
         content = result["choices"][0]["message"]["content"]
+        usage = result.get("usage")
+        latency_ms = (time.perf_counter() - start_ts) * 1000
+
+        # ── Audit: log success ───────────────────────────────────────────
+        self._log_llm(
+            prompt=prompt,
+            system=system,
+            model=self.model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            response_text=content,
+            usage=usage,
+            latency_ms=latency_ms,
+        )
+
         return LLMResponse(
             text=content,
             raw=result,
             model=self.model,
-            usage=result.get("usage"),
+            usage=usage,
+            latency_ms=latency_ms,
         )
+
+    def _log_llm(
+        self,
+        *,
+        prompt: str,
+        system: str | None,
+        model: str,
+        max_tokens: int,
+        temperature: float,
+        response_text: str | None = None,
+        usage: dict | None = None,
+        latency_ms: float | None = None,
+        error: str | None = None,
+    ) -> None:
+        """Write an llm_call event to the audit log."""
+        try:
+            import sys
+            from pathlib import Path
+
+            # Add project root to path so audit_logger can be imported
+            project_root = Path(__file__).parent.parent
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+
+            from bot.audit_logger import get_audit_logger
+
+            audit = get_audit_logger()
+
+            # Truncate very large payloads to keep logs manageable
+            max_prompt_len = 8000
+            max_response_len = 8000
+
+            prompt_snip = prompt[:max_prompt_len] + ("..." if len(prompt) > max_prompt_len else "")
+            system_snip = (system[:max_prompt_len] + ("..." if len(system) > max_prompt_len else "")) if system else None
+            response_snip = (response_text[:max_response_len] + ("..." if len(response_text) > max_response_len else "")) if response_text else None
+
+            metadata: dict[str, Any] = {
+                "model": model,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "latency_ms": round(latency_ms, 2) if latency_ms is not None else None,
+            }
+
+            if usage:
+                metadata["usage"] = usage
+            if error:
+                metadata["error"] = error
+
+            audit.log_event(
+                event_type="llm_call",
+                input=prompt_snip,
+                output=response_snip,
+                metadata=metadata,
+            )
+        except Exception:
+            # Never let audit logging break the actual LLM call
+            pass
 
 
 # ── Provider factory ─────────────────────────────────────────────────────────

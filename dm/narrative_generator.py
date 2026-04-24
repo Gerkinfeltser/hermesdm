@@ -306,14 +306,25 @@ class NarrativeGenerator:
         Build template context from state, applying overrides.
 
         Extracts location, characters present, NPCs nearby, and environmental
-        details from state, then applies any context overrides.
+        details from state['setup'] (user_input, main_threat, genre, lore),
+        then applies any context overrides.
         """
         campaign = state.get("campaign", {})
         location = campaign.get("current_location") or "un lugar desconocido"
         characters = state.get("characters", {})
         npcs = state.get("npcs", {})
 
-        # Format active characters
+        # ── Real setup data ──────────────────────────────────────────────────
+        setup = state.get("setup", {})
+        lore = setup.get("lore", {}) if setup else {}
+        genre = setup.get("setting_type", "fantasy")   # fantasy / scifi / horror / zombie / pirate
+        user_input = setup.get("description", "")
+        main_threat = lore.get("main_threat", "")
+        premise = setup.get("premise", "")
+        starting_location_desc = lore.get("starting_location_desc", "")
+        factions = lore.get("factions", {})
+
+        # ── Active characters ────────────────────────────────────────────────
         char_summaries = []
         for cid, char in characters.items():
             hp_data = char.get("hp", {}) if isinstance(char.get("hp"), dict) else {}
@@ -327,26 +338,75 @@ class NarrativeGenerator:
             ", ".join(char_summaries) if char_summaries else "El grupo está listo"
         )
 
-        # Format nearby NPCs
+        # ── Nearby NPCs with full detail (R1 requirement) ───────────────────
         npc_summaries = []
+        npc_details = []   # enriched NPC list for LLM context
         for nid, npc in npcs.items():
             if npc.get("location") == location or not npc.get("location"):
                 name = npc.get("name", nid)
                 status = npc.get("status", "presente")
+                role = npc.get("role", "")
+                secret = npc.get("secret", "")
+                personality = npc.get("disposition", "")
+                voice = npc.get("dialogue_style", "")
+                memories = npc.get("memory", [])
+                memories_str = "; ".join(memories[-3:]) if memories else "sin recuerdos relevantes"
                 npc_summaries.append(f"{name} ({status})")
+                npc_details.append(
+                    f"- {name}: {role}. Personality: {personality}. "
+                    f"Secret: {secret}. Voice: {voice}. Memorias: {memories_str}."
+                )
 
         npc_or_character = (
             f"{npc_summaries[0]} está aquí" if npc_summaries else character_present
         )
+        npcs_present_str = "\n".join(npc_details) if npc_details else "No hay NPCs cercanos."
 
+        # ── Genre-aware default values ──────────────────────────────────────
+        genre_defaults = {
+            "fantasy": {
+                "sensory_detail": "el olor a tierra mojada y el crujir de armas antiguas",
+                "environmental_detail": "una niebla dorada se aferra a las torres del castillo cercano",
+                "ambient_threat": "Un dragón observable en la distancia exhala humo",
+                "obstacle": "bloqueado por guardias del reino y un portazo oxidado",
+            },
+            "scifi": {
+                "sensory_detail": "el zumbido constante de los reactores y el aire reciclado",
+                "environmental_detail": "luces LED parpadeantes iluminan los pasillos metálicos de la estación",
+                "ambient_threat": "Una alarma de sector resuena: posible intrusión detectada",
+                "obstacle": "sellado por protocolo de seguridad de la megacorporación",
+            },
+            "horror": {
+                "sensory_detail": "el olor a humedad podrida y algo que se descompone",
+                "environmental_detail": "sombras que no deberían existir se mueven sin fuente de luz",
+                "ambient_threat": "Un susurro desde la oscuridad te llama por tu nombre",
+                "obstacle": "la puerta no responde y algo araña el otro lado",
+            },
+            "zombie": {
+                "sensory_detail": "el hedor de carne en descomposición y pólvora húmeda",
+                "environmental_detail": "calles vacías con车窗 rotos y señales de pánico masivo",
+                "ambient_threat": "Los gemidos de los muertos vivientes se acercan",
+                "obstacle": "la ruta está bloqueada por cadáveres y escombros",
+            },
+            "pirates": {
+                "sensory_detail": "sal marina en el aire y madera húmeda del barco",
+                "environmental_detail": "el muelle cruje bajo tus pies mientras gaviotas gritan",
+                "ambient_threat": "Un cañonazo distante sacude el puerto",
+                "obstacle": " patrullan barcos de la marina real",
+            },
+        }
+        defaults = genre_defaults.get(genre, genre_defaults["fantasy"])
+
+        # ── Core context ─────────────────────────────────────────────────────
         context: dict = {
             "location": location,
-            "sensory_detail": "las sombras se aferran a cada superficie",
-            "environmental_detail": "una fría niebla se arremolina entre piedras antiguas",
-            "ambient_threat": "Un gruñido distante resuena",
-            "obstacle": "oculto por la vegetación y el olvido",
+            "sensory_detail": defaults["sensory_detail"],
+            "environmental_detail": defaults["environmental_detail"],
+            "ambient_threat": defaults["ambient_threat"],
+            "obstacle": defaults["obstacle"],
             "character_present": character_present,
             "npc_or_character_present": npc_or_character,
+            "npcs_present": npcs_present_str,   # enriched for LLM
             "action_description": "se mueve con cautela por el terreno",
             "reaction_description": "te observa con recelo",
             "emotional_tone": "cargado de tensión no dicha",
@@ -356,38 +416,36 @@ class NarrativeGenerator:
                 "current_environment", "campo de batalla"
             ),
             "tactical_situation": "El posicionamiento se vuelve crítico.",
-            "revelation": "todo en lo que creías estaba construido sobre mentiras",
+            "revelation": premise or "todo en lo que creías estaba construido sobre mentiras",
             "affected_party": "El peso de ello se asienta sobre el grupo",
             "healing_atmosphere": "una hoguera crepita cerca",
             "resources_available": "Provisiones y descanso",
             "party_status": "La fatiga pesa mucho",
             "ambient_details": "La noche transcurre lentamente",
             "opportunity_available": "Entrenamiento o preparación es posible",
+            # ── Setup-derived fields (new) ───────────────────────────────────
+            "genre": genre,
+            "main_threat": main_threat,
+            "user_input": user_input,
+            "factions": ", ".join(f"{k} ({v})" for k, v in factions.items()) if factions else "Desconocidas",
+            "premise": premise,
+            "starting_location_desc": starting_location_desc,
         }
 
-        # Read setup lore for campaign-specific overrides
-        setup = state.get("setup", {})
-        lore = setup.get("lore", {}) if setup else {}
-        if lore.get("starting_location_desc"):
-            context["sensory_detail"] = lore["starting_location_desc"]
-            context["environmental_detail"] = lore["starting_location_desc"]
-        if lore.get("main_threat"):
-            context["ambient_threat"] = f"La presencia de {lore['main_threat']} se siente cerca"
-        if setup.get("premise"):
-            context["revelation"] = setup["premise"]
+        # ── Apply lore overrides ───────────────────────────────────────────
+        if starting_location_desc:
+            context["sensory_detail"] = starting_location_desc
+            context["environmental_detail"] = starting_location_desc
+        if main_threat:
+            context["ambient_threat"] = f"La presencia de {main_threat} se siente cerca"
+        if premise:
+            context["revelation"] = premise
 
-        # Apply explicit overrides (including player_action from ActionRouter)
+        # ── Apply explicit overrides ───────────────────────────────────────
         for key, value in overrides.items():
             if key in context or key in [
-                "location",
-                "speaker",
-                "defender",
-                "attacker",
-                "npc_name",
-                "damage",
-                "dc",
-                "roll",
-                "skill_name",
+                "location", "speaker", "defender", "attacker",
+                "npc_name", "damage", "dc", "roll", "skill_name",
             ]:
                 context[key] = value
 
@@ -425,14 +483,19 @@ class NarrativeGenerator:
         # Merge state-derived context
         full_context = self._build_context(state, context)
 
-        # LLM mode: call AI provider
+        # LLM mode: call AI provider (with template fallback on failure)
         if self.llm_client is not None:
-            narrative = self._generate_with_llm(scene_type, full_context, language, milestone_context)
-            triggered_image = self._should_trigger_image(scene_type, full_context)
-            return {
-                "narrative": narrative,
-                "triggered_image": triggered_image,
-            }
+            try:
+                narrative = self._generate_with_llm(scene_type, full_context, language, milestone_context)
+                triggered_image = self._should_trigger_image(scene_type, full_context)
+                return {
+                    "narrative": narrative,
+                    "triggered_image": triggered_image,
+                }
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"LLM generation failed ({e}); falling back to template mode")
+                # Fall through to template mode below
 
         # Template mode (default)
         template = self._select_template(scene_type, language)
@@ -925,12 +988,22 @@ Requisitos:
 
         Builds a rich DM prompt from context + scene type, then calls the
         configured provider via LLMClient.
+
+        R1: 3 NPCs with name/title/secret/personality/voice/secrets/memories_secrets fields
+        R2: Genre-aware content (fantasía/terror/sci-fi/etc)
+        R3: Narrative rules (never break 4th wall, dice outcomes are final, adapt to player choices)
+        R4: WorldBuilder table rules (consult dm/world_builder.py for the rules tables)
+        R5: Table tone/style rules
         """
         location = context.get("location", "an unknown place")
         characters = context.get("character_present", "The party")
         npcs = context.get("npcs_present", "No NPCs nearby")
         mood = context.get("emotional_tone", "tense")
         recent = context.get("recent_events", "The adventure continues")
+        genre = context.get("genre", "fantasy")
+        main_threat = context.get("main_threat", "")
+        premise = context.get("premise", "")
+        factions = context.get("factions", "")
 
         scene_type_str = scene_type.value.lower().replace("_", " ")
 
@@ -960,26 +1033,127 @@ Requisitos:
                 milestone_section += "🌅 RESOLUCIÓN: Revelá las consecuencias y cerrá con fuerza.\n"
             milestone_section += "═══\n"
 
+        # ── R1-R5 Constraints Block ──────────────────────────────────────────
+        constraints = f"""**REGLAS DE ORO (R1-R5) — NO PODÉS violar ninguna:**
+
+R1 — NPCs: Si hay NPCs presentes, cada uno debe tener nombre, título, secreto,
+  personalidad, y forma de hablar coherentes. Usá los datos provistos:
+  {npcs}
+
+R2 — Género del mundo: El setting es **{genre}**. Adaptá vocabulario, atmósfera
+  y amenazas al género. Amenaza principal: {main_threat}
+
+R3 — Reglas narrativas:
+  - NUNCA rompas la 4ª pared
+  - Los resultados de dados son DEFINITIVOS (no los neguis ni los cambies)
+  - Adaptate a las elecciones de los jugadores
+  - No hagas "meta-comentary" sobre tiradas, mecanismos de juego, o estado del grupo
+
+R4 — Tablas del WorldBuilder (dm/world_builder.py):
+  - Usá las descripciones de lugares,NPCs y amenazas del setup original
+  - Facciones activas: {factions}
+  - Premisa de la campaña: {premise}
+
+R5 — Tono y estilo de mesa:
+  - Segunda persona: "Te acercás...", "Sentís...", "Oís..."
+  - 2-4 oraciones máximo
+  - Terminá SIEMPRE con una situación abierta (nunca con signo de pregunta)
+  - Sin descripciones de tiradas de dados
+  - Narrativa inmersiva y cinematográfica"""
+
+        # ── Few-shot examples (2-3 pairs) ──────────────────────────────────
+        if genre == "fantasy":
+            few_shot = """
+Ejemplos:
+
+Input: EXPLORATION en taberna fantasy, NPCs: Vorn (capitán guardián, seco, guarda secreto)
+Output: "El fuego de la chimenea proyecta sombras danzantes sobre las paredes de piedra.
+Vorn te observa desde su rincón habitual, la mano apoyada sobre la empuñadura de su espada.
+Alguien susurra tu nombre desde la barra."
+
+Input: COMBAT contra dragón, jugador eligió atacar
+Output: "El dragón exhala una ráfaga de fuego. La heat te golpea como un muro.
+Tu espada encuentra un punto entre las escamas — daño sólido. El dragón ruge y se tambalea.
+Quedan 2 rondas antes de que la estructura colapse."
+
+Input: DIALOGUE con mercader elfo, jugador negocia
+Output: "La elfa inclina la cabeza, sus ojos dorados evaluándote.
+'Ofrecés menos de lo que vale mi mercancía', dice con una sonrisa que no llega a sus ojos.
+'Tomás o te vas.' Un cliente habitual le entrega una bolsa de monedas sin regatear."
+"""
+        elif genre == "scifi":
+            few_shot = """
+Ejemplos:
+
+Input: EXPLORATION en estación espacial, NPCs: AXI-9 (IA rebelde, cortante)
+Output: "El aire reciclado tiene ese sabor metálico que nunca terminás de ignorar.
+AXI-9 gira su lente hacia vos: 'Visitante detectado. Protocolo 7: identificarte o salir.'
+Los monitores parpadean. Algo no cuadna en las lecturas de sector 4."
+
+Input: COMBAT contra cíborg, jugador eligió defenderse
+Output: "La ráfaga de energía impacta tu escudo — el rebote regresa como un eco brillante.
+El cíborg expone sus circuitos en el contraataque. Daño moderado. La estación tiembla.
+La siguiente acción podría depressurizar el módulo completo."
+
+Input: DIALOGUE con comandante, jugador intimidate
+Output: "La comandante RECH-7 cruza los brazos, su armadura chirriando.
+'Intimidado, decís.' Una risa seca escapa de su garganta. 'Eso no es gracioso.'
+Te study con la calma de alguien que ya ganó. '¿Cuál es tu verdadera pregunta?'"
+"""
+        elif genre == "horror":
+            few_shot = """
+Ejemplos:
+
+Input: EXPLORATION en mansión embrujada, NPCs: Padre Ignatius (sacerdote caído, atormentado)
+Output: "El piso cruje bajo cada paso. La luz de tu linterna revela muebles cubiertos de polvo
+y un espejo agrietado. Padre Ignatius se persigna al pasar: 'No mires lo que reflejan.'
+Desde algún lado, un reloj que no debería funcionar da las doce."
+
+Input: COMBAT contra criatura, jugador huye
+Output: "Tu sprint hacia la puerta es desesperado. La criatura clava sus garras en la mesa
+justo donde estabas. El impacto tira cartas de tarot al aire — una muestra del destino que te salvó.
+'¡La puerta trasera!' grita alguien. Solo quedan segundos."
+
+Input: DIALOGUE con doctor forense, jugador investiga
+Output: "La Dra. Voss levanta la vista de la mesa de autopsias, sus manos manchadas de algo oscuro.
+'Esto no fue hecho por ningún animal.' Su voz es plana, mecánica. 'Tampoco por nada humano.'
+Te mira como si evaluara si vos podrías ser la siguiente muestra."
+"""
+        else:
+            few_shot = """
+Ejemplos:
+
+Input: EXPLORATION, NPCs presentes
+Output: "Te encontrás en {location}. {npcs} La situación se siente tensa, cargado de posibilidades."
+
+Input: COMBAT, atacas
+Output: "El golpe encuentra su marca. La reacción del oponente es inmediata.
+El resultado cambia el momentum del enfrentamiento."
+
+Input: DIALOGUE con NPC
+Output: "{speaker} te mira fijamente. '¿Realmente querés saber la respuesta?'
+El silencio se extiende. Lo que digas ahora puede cambiar todo."
+""".format(location=location, npcs=npcs if npcs else "El grupo está solo.")
+
         user_prompt = (
-            f"You are the Dungeon Master narrating a D&D Fifth Edition game.\n"
-            f"Generate a vivid, {mood} narrative for a {scene_type_str} scene.\n\n"
-            f"Location: {location}\n"
-            f"Characters present: {characters}\n"
-            f"NPCs present: {npcs}\n"
-            f"Recent events: {recent}\n"
+            f"** HermesDM — Generador de escenas D&D 5e **\n\n"
+            f"{constraints}\n"
+            f"{few_shot}\n"
+            f"**TU GENERACIÓN:**\n"
+            f"Escena: {scene_type_str.upper()}\n"
+            f"Ubicación: {location}\n"
+            f"Personajes: {characters}\n"
+            f"NPCs:\n{npcs}\n"
+            f"Eventos recientes: {recent}\n"
             f"{milestone_section}\n"
-            "Requirements:\n"
-            "- 2-4 sentences maximum\n"
-            "- End with an open SITUATION that invites action (never end with a question mark)\n"
-            '- Immersive, second-person perspective ("You notice...", "The air grows cold...")\n'
-            "- No dice roll descriptions, no meta-commentary\n"
-            "- Directly continue the story\n\n"
-            "Narrate:"
+            f"**Narrá la escena (2-4 oraciones, terminá en situación abierta, sin signos de pregunta):**\n"
         )
 
         system = (
-            "You are Hermes, an expert D&D Fifth Edition Dungeon Master. "
-            "You narrate in vivid, cinematic prose. 2-4 sentences. Open ending. Never a question."
+            "You are HermesDM, an expert D&D Fifth Edition Dungeon Master. "
+            "You narrate in vivid, cinematic prose. 2-4 sentences. Open ending. Never a question. "
+            "Never break the 4th wall. Dice rolls are final. "
+            "All NPC names, secrets, and personalities must be consistent with provided data."
         )
 
         result = self.llm_client.text(

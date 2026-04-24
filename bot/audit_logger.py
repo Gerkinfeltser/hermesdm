@@ -45,6 +45,7 @@ EVENT_TYPES = (
     "error",
     "session_start",
     "session_end",
+    "llm_call",
 )
 
 

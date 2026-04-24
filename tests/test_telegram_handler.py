@@ -1209,7 +1209,7 @@ class TestBuildApp:
             from bot.telegram_handler import build_app
             build_app()
             # We expect 47 CommandHandlers (incl. combat + resume + config + map + me + give + countdown + npcs + npcsearch + npcnote + npcmemory + j + perfecto + arrancamos + cancel_setup)
-            assert call_count == 48, f"Expected 48 handler registrations, got {call_count}"
+            assert call_count == 51, f"Expected 51 handler registrations, got {call_count}"
 
 # ------------------------------------------------------------------
 # Error handling — all handlers

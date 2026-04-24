@@ -209,20 +209,89 @@ def create_story_arc_from_ai_response(
     )
 
 
-def create_default_story_arc(pacing_level: str = "medium") -> StoryArc:
-    """Fallback arc when AI generation fails."""
+def create_default_story_arc(pacing_level: str = "medium", genre: str = "fantasy") -> StoryArc:
+    """Fallback arc when AI generation fails.
+    
+    NO usa placeholder descriptions. Cada milestone tiene una descripción
+    concreta y no-genérica.
+    """
     config = PACING_CONFIG.get(pacing_level, PACING_CONFIG["medium"])
+    
+    # Descriptions por género, específicas y no intercambiables
+    DESCRIPTIONS_BY_GENRE = {
+        "vampire": {
+            "hook": "Los PJ despiertan en un pueblo donde alguien ha sido encontrado sin sangre. La noticia se extiende como fuego.",
+            "rising_action_1": "Una investigación lleva a los PJ a las catacumbas bajo la iglesia. Algo huele la luz del sol.",
+            "rising_action_2": "Un PJ es abordado por un extraño que afirma ser cazador. Sus motivos no están claros.",
+            "midpoint": "Los PJ descubren la tumba del primer vampiro. Una inscripción alerta: 'Quien lo despierte, se unira a su causa.'",
+            "climax": "El sitio al castillo del señor vampiro. Turnos simultaneos: combate y puzzle para sellar la tumba.",
+            "resolution": "El vampiro es destruido. El pueblo recupera la luz. Las siguientes generaciones no sabran lo que paso aqui.",
+        },
+        "fantasy": {
+            "hook": "Los PJ se conocen en una taberna cuando un mensajero interrumpe con noticias del rey.",
+            "rising_action_1": "El camino al castillo esta bloqueado por criaturas que no deberian existir.",
+            "rising_action_2": "Un traidor en la corte ha revelado los planes del grupo.",
+            "midpoint": "Los PJ descubren que el rey no es la victima -- es el autor del conflicto.",
+            "climax": "El enfrentamiento final en el salon del trono. Politica y hojas.",
+            "resolution": "El reino tiene nuevo rumbo. Los PJ deciden su lugar en el.",
+        },
+        "horror": {
+            "hook": "Los PJ llegan a un pueblo donde las puertas estan cerradas desde dentro. Nadie duerme.",
+            "rising_action_1": "Los cuerpos aparecen sin heridas visibles. La criatura no deja rastro.",
+            "rising_action_2": "Un PJ es poseido por algo que no puede sacudir.",
+            "midpoint": "La verdadera horror se revela: el pueblo entero es una granja de cuerpos.",
+            "climax": "Escapar del pueblo antes del amanecer. Todo ardiendo detras.",
+            "resolution": "Los PJ escapan, pero algo viene con ellos.",
+        },
+        "scifi": {
+            "hook": "Los PJ despiertan en una estacion derelicta. La ultima transmision fue hace 3 dias.",
+            "rising_action_1": "La estacion tiene senales de vida -- pero la tripulacion esta muerta.",
+            "rising_action_2": "Un PJ recibe una senal privada. No es de esta estacion.",
+            "midpoint": "La estacion es una trampa. El agresor quiere algo especifico -- y es uno de los PJ.",
+            "climax": "La nave de escape es una. Los PJ deben decidir: quien vive.",
+            "resolution": "Los supervivientes escapan. La corporacion ahora los busca.",
+        },
+        "zombie": {
+            "hook": "Los PJ se despiertan en un hospital vacio. Las marcas de sangre llevan hacia afuera.",
+            "rising_action_1": "La ciudad esta en silencio. Los cuerpos se mueven de forma equivocada.",
+            "rising_action_2": "Un PJ ha sido mordido. El tiempo corre.",
+            "midpoint": "El refugio seguro resulta ser una trampa. Alguien o algo controla a los muertos.",
+            "climax": "La unica forma de escapar es atravesar la horda. Todo por un lider.",
+            "resolution": "Los supervivientes escapan. La infeccion se ha propagado mas alla.",
+        },
+        "pirates": {
+            "hook": "Los PJ son capturados por una tripulacion pirata. El captain ofrece un trato.",
+            "rising_action_1": "El mapa del tesoro lleva a una isla que no esta en ningun mapa.",
+            "rising_action_2": "Una traicion entre la tripulacion divide a los PJ.",
+            "midpoint": "El tesoro no es oro -- es algo mucho peor. Y esta despierto.",
+            "climax": "La batalla naval final. El barco se hunde pero el captain tiene un ultimo plan.",
+            "resolution": "Los PJ escapan con el tesoro. Pero algo los persigue en el agua.",
+        },
+        "_default": {
+            "hook": "Un evento interrumpe la vida cotidiana de los PJ y los une en una busqueda.",
+            "rising_action_1": "El camino se complica con un obstaculo que no esperaban.",
+            "rising_action_2": "Una traicion o secreto emerge del grupo.",
+            "midpoint": "La verdadera naturaleza del conflicto se revela.",
+            "climax": "Todo esta en juego. La decision final debe tomarse.",
+            "resolution": "Las consecuencias de la decision se desarrollan.",
+        }
+    }
+    
+    defaults = DESCRIPTIONS_BY_GENRE.get(genre, DESCRIPTIONS_BY_GENRE["_default"])
+    
     milestones = []
     for spec in config["milestone_specs"]:
+        desc = defaults.get(spec[0], f"Momento critico {spec[0]} -- nada es lo que pareca.")
         milestones.append(
             Milestone(
                 id=spec[0],
                 type=spec[1],
-                description=f"Milestone {spec[0]} — avanza la trama principal.",
+                description=desc,
                 min_scenes=spec[2],
                 max_scenes=spec[3],
             )
         )
+    
     return StoryArc(
         pacing_level=pacing_level,
         total_sessions=config["total_sessions"],

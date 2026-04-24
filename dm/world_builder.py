@@ -5,6 +5,7 @@ No game mechanics here — pure world generation.
 """
 
 import random
+import re
 import uuid
 from datetime import datetime
 
@@ -273,9 +274,9 @@ def generate_setup_with_ai(description: str, tone: str = "serious", setting: str
 
     # ── Layer 1: AI generation with hardened prompt ──────────────────────────
     try:
-        api_key = os.getenv("MINIMAX_API_KEY", "")
+        api_key = os.getenv("OPENROUTER_API_KEY", "") or os.getenv("MINIMAX_API_KEY", "")
         if not api_key:
-            raise ValueError("MINIMAX_API_KEY not set")
+            raise ValueError("No API key set (OPENROUTER_API_KEY or MINIMAX_API_KEY)")
 
         from dm.provider_client import MiniMaxProvider
 
@@ -405,7 +406,7 @@ No escribas nada más que el JSON."""
     except Exception as ai_err:
         # ── Layer 3: Second-chance AI call with simplified prompt ───────────
         try:
-            api_key = os.getenv("MINIMAX_API_KEY", "")
+            api_key = os.getenv("OPENROUTER_API_KEY", "") or os.getenv("MINIMAX_API_KEY", "")
             if api_key:
                 from dm.provider_client import MiniMaxProvider
                 provider = MiniMaxProvider(api_key=api_key)

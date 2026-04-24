@@ -73,22 +73,23 @@ class LLMClient(ABC):
 
 class MiniMaxProvider(LLMClient):
     """
-    MiniMax provider implementation.
+    MiniMax provider implementation via OpenRouter.
 
-    Requires MINIMAX_API_KEY and optionally MINIMAX_BASE_URL in environment
-    or constructor.
+    Requires OPENROUTER_API_KEY env var.
+    Falls back to MINIMAX_API_KEY for direct MiniMax API.
     """
 
     def __init__(
         self,
         api_key: str | None = None,
-        base_url: str = "https://api.minimax.io/v1",
-        model: str = "MiniMax-M2.7",
+        base_url: str = "https://openrouter.ai/api/v1",
+        model: str = "minimax/minimax-m2.7",
     ) -> None:
         import os
-        self.api_key = api_key or os.getenv("MINIMAX_API_KEY", "")
-        self.base_url = base_url or os.getenv("MINIMAX_BASE_URL", "https://api.minimax.io/v1")
-        self.model = model
+        # Try OpenRouter first, then fallback to direct MiniMax
+        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY", "") or os.getenv("MINIMAX_API_KEY", "")
+        self.base_url = base_url or os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+        self.model = model or os.getenv("MINIMAX_MODEL", "minimax/minimax-m2.7")
 
     def text(
         self,

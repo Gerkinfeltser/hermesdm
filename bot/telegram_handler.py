@@ -308,8 +308,8 @@ def _get_image_handler() -> ImageEventHandler:
         from dm.image_event_handler import ImageEventHandler
         from dm.image_provider import get_provider
 
-        # Default to Pollinations (gratis, no API key needed)
-        provider = get_provider("pollinations")
+        provider_name = os.environ.get("IMAGE_PROVIDER", "pollinations")
+        provider = get_provider(provider_name)
         _AUTO_IMAGE_HANDLER = ImageEventHandler(provider=provider, enabled=True)
     return _AUTO_IMAGE_HANDLER
 
@@ -2884,16 +2884,23 @@ async def _closure_image_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         chat_id = context.job.data.get("chat_id")
         prompt = context.job.data.get("prompt")
-        context.job.data.get("campaign_id")
+        campaign_id = context.job.data.get("campaign_id")
 
         if not prompt or not chat_id:
             return
 
-        # Generate the closure image
+        # Determine provider from campaign state or env fallback
         from dm.image_event_handler import ImageContext, ImageEventHandler
         from dm.image_provider import get_provider
+        from state.state_manager import load_state
 
-        provider = get_provider("pollinations")
+        provider_name = os.environ.get("IMAGE_PROVIDER", "pollinations")
+        if campaign_id:
+            state = load_state(campaign_id)
+            if state:
+                provider_name = state.get("campaign", {}).get("image_provider", provider_name)
+
+        provider = get_provider(provider_name)
         handler = ImageEventHandler(provider=provider, enabled=True)
         ctx = ImageContext(
             scene_type="session_end",

@@ -98,7 +98,7 @@ class Settings(BaseSettings):
     # Leave empty to allow DMs and any group (e.g. ALLOWED_GROUP_ID=-1003916745496).
     ALLOWED_GROUP_ID: int | None = None
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()
@@ -308,8 +308,8 @@ def _get_image_handler() -> ImageEventHandler:
         from dm.image_event_handler import ImageEventHandler
         from dm.image_provider import get_provider
 
-        # Default to Pollinations (gratis, no API key needed)
-        provider = get_provider("pollinations")
+        provider_name = os.environ.get("IMAGE_PROVIDER", "pollinations")
+        provider = get_provider(provider_name)
         _AUTO_IMAGE_HANDLER = ImageEventHandler(provider=provider, enabled=True)
     return _AUTO_IMAGE_HANDLER
 
@@ -1040,6 +1040,15 @@ async def cmd_begin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         # Mark adventure as started
         state["adventure_started"] = True
+
+        # Persist campaign metadata from setup so all handlers can read it
+        state["campaign"]["current_location"] = lore.get("starting_location", "Ubicación desconocida")
+        state["campaign"]["current_location_desc"] = lore.get("starting_location_desc", "")
+        state["campaign"]["main_threat"] = lore.get("main_threat", "")
+        state["campaign"]["premise"] = setup.get("premise", "")
+        state["campaign"]["hook"] = setup.get("hook", "")
+        state["campaign"]["tone"] = setup.get("tone", "serious")
+        state["campaign"]["setting_type"] = setup.get("setting_type", "fantasy")
 
         # Transfer story_arc from setup to state if present
         setup_arc = setup.get("story_arc")
@@ -2875,16 +2884,23 @@ async def _closure_image_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         chat_id = context.job.data.get("chat_id")
         prompt = context.job.data.get("prompt")
-        context.job.data.get("campaign_id")
+        campaign_id = context.job.data.get("campaign_id")
 
         if not prompt or not chat_id:
             return
 
-        # Generate the closure image
+        # Determine provider from campaign state or env fallback
         from dm.image_event_handler import ImageContext, ImageEventHandler
         from dm.image_provider import get_provider
+        from state.state_manager import load_state
 
-        provider = get_provider("pollinations")
+        provider_name = os.environ.get("IMAGE_PROVIDER", "pollinations")
+        if campaign_id:
+            state = load_state(campaign_id)
+            if state:
+                provider_name = state.get("campaign", {}).get("image_provider", provider_name)
+
+        provider = get_provider(provider_name)
         handler = ImageEventHandler(provider=provider, enabled=True)
         ctx = ImageContext(
             scene_type="session_end",
@@ -3612,7 +3628,16 @@ async def _handle_player_action(update: Update, context: ContextTypes.DEFAULT_TY
         milestone_ctx = pacing.get_milestone_context()
 
         router = ActionRouter(state=state, character=char)
-        result = router.route(update, action_text, scene_type_override=scene_type, milestone_context=milestone_ctx)
+        try:
+            result = router.route(update, action_text, scene_type_override=scene_type, milestone_context=milestone_ctx)
+        except Exception as e:
+            log.exception(f"Action routing failed: {e}")
+            await edit_text(bot, chat_id, msg_id, "Error procesando acción. Reiniciá la campaña si persiste.")
+            return
+
+        if not result:
+            await edit_text(bot, chat_id, msg_id, "No se pudo procesar la acción. Probá de nuevo.")
+            return
 
         # ── Check milestone advancement ────────────────────────────────────────
         try:

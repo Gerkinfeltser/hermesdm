@@ -1,0 +1,31 @@
+# HermesDM Bot Configuration
+# Copy this file to config.yaml and customize for your deployment.
+
+bot:
+  name: "HermesDM"
+  # Telegram bot token (or set TELEGRAM_BOT_TOKEN env var)
+  token: "YOUR_BOT_TOKEN_HERE"
+  # Optional: restrict to a specific group ID (e.g. -1003916745496)
+  allowed_group_id: null
+  # Admin user IDs for /audit and admin commands
+  admin_user_ids: []
+
+# Image generation provider
+# Options: pollinations (default/free), minimax, flux, nanobanana, fal
+image_provider: "pollinations"
+
+# Optional: provider-specific settings
+providers:
+  minimax:
+    api_key: "YOUR_MINIMAX_API_KEY"
+  flux:
+    endpoint: "http://localhost:7860"
+  nanobanana:
+    api_key: "YOUR_NANOBANANA_KEY"
+  fal:
+    api_key: "YOUR_FAL_KEY"
+
+# Logging
+logging:
+  level: "INFO"
+  format: "%(asctime)s | %(name)s | %(levelname)s | %(message)s"

@@ -1,6 +1,6 @@
 # SDD-004: Fix /setup Generation Echo Bug
 
-## Status: Draft → Ready for Review
+## Status: ✅ Implemented & Tested
 
 ---
 
@@ -343,16 +343,16 @@ async def test_full_setup_flow_no_echo():
 
 ## 6. Implementation Checklist
 
-- [ ] **Step 1:** Rewrite AI prompt template with anti-copy guardrails
-- [ ] **Step 2:** Increase `max_tokens` from 800 → 1500
-- [ ] **Step 3:** Implement `_is_echo()` validator
-- [ ] **Step 4:** Add validator call after JSON parse in AI path
-- [ ] **Step 5:** Rewrite fallback premise (no concatenation)
-- [ ] **Step 6:** Add second-chance AI call in fallback with simplified prompt
-- [ ] **Step 7:** Improve template fallback (procedural location/NPCs)
-- [ ] **Step 8:** Expand `_generate_themed_npcs()` keyword map (demonio, zombie, ninja, SAO, etc.)
-- [ ] **Step 9:** Implement `_generate_procedural_npcs()` for unmatched keywords
-- [ ] **Step 10:** Write unit tests (F1–F7)
+- [x] **Step 1:** Rewrite AI prompt template with anti-copy guardrails
+- [x] **Step 2:** Increase `max_tokens` from 800 → 2048
+- [x] **Step 3:** Implement `_is_echo()` validator
+- [x] **Step 4:** Add validator call after JSON parse in AI path
+- [x] **Step 5:** Rewrite fallback premise (no concatenation)
+- [x] **Step 6:** Add second-chance AI call in fallback with simplified prompt
+- [x] **Step 7:** Improve template fallback (procedural location/NPCs)
+- [x] **Step 8:** Expand `_generate_themed_npcs()` keyword map (demonio, zombie, ninja, SAO, etc.)
+- [x] **Step 9:** Implement `_generate_procedural_npcs()` for unmatched keywords
+- [x] **Step 10:** Write unit tests (F1–F7)
 - [ ] **Step 11:** Run integration tests
 - [ ] **Step 12:** Update CHANGELOG
 

@@ -952,33 +952,45 @@ async def _approve_setup(update: Update, context: ContextTypes.DEFAULT_TYPE, cs:
         await update.message.reply_text(f"Error al aprobar setup: {e}")
 
 
+def _escape_markdown(text: str) -> str:
+    """Escape special Markdown chars in AI-generated content."""
+    if not text:
+        return text
+    # Escape underscores that would break Telegram Markdown parsing
+    return text.replace("_", r"\_")
+
+
 def _format_setup_preview(setup_data: dict) -> str:
     """Formatea el preview del setup para mostrar al DM."""
     lore = setup_data.get("lore", {})
     factions = lore.get("factions", {})
     npcs = lore.get("npcs", [])
 
+    # Escapar underscores en todo contenido AI para no romper Markdown de Telegram
+    esc = _escape_markdown
+
     factions_str = ""
     if factions:
-        factions_str = " | ".join(f"{k} ({v})" for k, v in factions.items())
+        factions_str = " | ".join(f"{esc(k)} ({esc(v)})" for k, v in factions.items())
 
     npcs_str = ""
     if npcs:
         npcs_str = "\n".join(
-            f"• *{n.get('name','?')}* — {n.get('role','?')}: \"{n.get('dialogue','')}\""
+            f"• *{esc(n.get('name','?'))}* — {esc(n.get('role','?'))}: \"{esc(n.get('dialogue',''))}\""
             for n in npcs
         )
 
     classes = setup_data.get("classes")
     classes_str = ""
     if classes:
-        classes_str = " | ".join(f"_{c}_" for c in classes)
+        # No usar _alrededor_ de clases si contienen underscores — rompería Markdown
+        classes_str = " | ".join(f"*{esc(c)}*" for c in classes)
 
     equipment = setup_data.get("starting_equipment", [])
     equipment_str = ""
     if equipment:
         equipment_str = "\n".join(
-            f"• {eq.get('name','?')} — _{eq.get('description','')[:50]}_"
+            f"• {esc(eq.get('name','?'))} — {esc(eq.get('description','')[:50])}"
             for eq in equipment
         )
 
@@ -990,20 +1002,26 @@ def _format_setup_preview(setup_data: dict) -> str:
         milestones = story_arc.get("milestones", [])
         arc_str = f"\n📜 *Arco narrativo* ({pacing}, {len(milestones)} hitos):\n"
         for i, m in enumerate(milestones, 1):
-            arc_str += f"   {i}. {m.get('id', '?')}: {m.get('description', '')[:50]}...\n"
+            arc_str += f"   {i}. {esc(m.get('id', '?'))}: {esc(m.get('description', '')[:50])}...\n"
+
+    premise = setup_data.get("premise", "")
+    hook = setup_data.get("hook", "")
+    location = lore.get("starting_location", "?")
+    location_desc = lore.get("starting_location_desc", "")
+    threat = lore.get("main_threat", "?")
 
     return (
         f"🎭 *PREVIEW DE CAMPAÑA*\n"
         f"{'━'*20}\n\n"
-        f"📝 *Descripción:*\n{setup_data.get('description','')}\n\n"
+        f"📝 *Descripción:*\n{esc(setup_data.get('description',''))}\n\n"
         f"{'🎭 *Clases:* ' + classes_str if classes_str else ''}\n"
-        f"📖 *Premise:*\n{setup_data.get('premise','')}\n\n"
-        f"🎯 *Hook:*\n{setup_data.get('hook','')}\n\n"
-        f"🌍 *Ubicación:* {lore.get('starting_location','?')}\n"
-        f"   _{lore.get('starting_location_desc','')}_\n\n"
+        f"📖 *Premise:*\n{esc(premise)}\n\n"
+        f"🎯 *Hook:*\n{esc(hook)}\n\n"
+        f"🌍 *Ubicación:* {esc(location)}\n"
+        f"   {esc(location_desc)}\n\n"
         f"⚔️ *Tono:* {setup_data.get('tone','serious')} | "
         f"*Setting:* {setup_data.get('setting_type','fantasy')}\n"
-        f"🚨 *Amenaza:* {lore.get('main_threat','?')}\n"
+        f"🚨 *Amenaza:* {esc(threat)}\n"
         f"{'⚡ *Facciones:* ' + factions_str if factions_str else ''}\n"
         f"{'👥 *NPCs:*'}{chr(10) + npcs_str if npcs_str else ''}{chr(10)}"
         f"{'🎒 *Equipo inicial:*'}{chr(10) + equipment_str if equipment_str else ''}"
@@ -1017,34 +1035,41 @@ async def _publish_setup_to_group(context: ContextTypes.DEFAULT_TYPE, group_chat
     factions = lore.get("factions", {})
     npcs = lore.get("npcs", [])
 
+    esc = _escape_markdown
+
     factions_str = ""
     if factions:
-        factions_str = " | ".join(f"{k} ({v})" for k, v in factions.items())
+        factions_str = " | ".join(f"{esc(k)} ({esc(v)})" for k, v in factions.items())
 
     npcs_str = ""
     if npcs:
         npcs_str = "\n".join(
-            f"• *{n.get('name','?')}* — {n.get('role','?')}"
+            f"• *{esc(n.get('name','?'))}* — {esc(n.get('role','?'))}"
             for n in npcs
         )
 
     classes = setup_data.get("classes")
-    classes_str = " | ".join(f"_{c}_" for c in classes) if classes else ""
+    classes_str = " | ".join(f"*{esc(c)}*" for c in classes) if classes else ""
 
     equipment = setup_data.get("starting_equipment", [])
     equipment_str = ""
     if equipment:
         equipment_str = "\n".join(
-            f"• {eq.get('name','?')} — _{eq.get('description','')[:40]}_"
+            f"• {esc(eq.get('name','?'))} — {esc(eq.get('description','')[:40])}"
             for eq in equipment
         )
+
+    premise = setup_data.get("premise", "")
+    hook = setup_data.get("hook", "")
+    location = lore.get("starting_location", "?")
+    location_desc = lore.get("starting_location_desc", "")
 
     msg = (
         f"🎭 *Nueva Campaña: {setup_data.get('setting_type','Campaña').capitalize()}*\n"
         f"{'━'*20}\n\n"
-        f"📖 *Premisa*\n{setup_data.get('premise','')}\n\n"
-        f"🎯 *Hook Inicial*\n{setup_data.get('hook','')}\n\n"
-        f"📍 *Ubicación*\n{lore.get('starting_location','?')} — {lore.get('starting_location_desc','')}\n\n"
+        f"📖 *Premisa*\n{esc(premise)}\n\n"
+        f"🎯 *Hook Inicial*\n{esc(hook)}\n\n"
+        f"📍 *Ubicación*\n{esc(location)} — {esc(location_desc)}\n\n"
         f"{'⚡ *Facciones:* ' + factions_str + chr(10) if factions_str else ''}"
         f"{'👥 *NPCs:*'}{chr(10) + npcs_str if npcs_str else ''}{chr(10)}"
         f"{'🎒 *Equipo inicial:*'}{chr(10) + equipment_str + chr(10) if equipment_str else ''}"
@@ -4101,6 +4126,9 @@ async def _echo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 def main() -> None:
     """Entry point for the hermesdm CLI command (pip install -e .)."""
+    from dotenv import load_dotenv
+    load_dotenv("/home/hermes/hermesdm/.env")
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",

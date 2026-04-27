@@ -41,50 +41,6 @@ def extract_classes_from_text(text: str) -> list[str] | None:
     return None
 
 
-_GENRE_KEYWORDS = {
-    "vampire": {"vampiro", "vampira", "sangre", "nocturno", "inmortal", "colmillo", "castillo", "dracula"},
-    "fantasy": {"dragon", "mago", "reino", "hechizo", "elfo", "orco", "taberna", "espada", "dragón"},
-    "horror": {"oscuridad", "maldito", "demonio", "sangre", "muerte", "pueblo", "maldito", "demon"},
-    "scifi": {"nave", "cyborg", "estacion", "tecnologia", "espacio", "dato", "codigo", "holo", "station"},
-    "zombie": {"muerte viviente", "cadaver", "pandemia", "supervivencia", "mordida", "infectado", "zombie"},
-    "pirates": {"pirata", "barco", "mar", "tesoro", "capitan", "tripulacion", "corona", "codigo"},
-}
-
-
-def _validate_genre_presence(setup: dict, genre: str) -> list[str]:
-    """Verifica que el género aparezca en los campos clave.
-    
-    Returns: lista de errores (vacía = válido)
-    """
-    errors = []
-    genre_keywords = _GENRE_KEYWORDS.get(genre, set())
-    
-    if not genre_keywords:
-        return errors  # Unknown genre, skip validation
-    
-    # Check main_threat
-    threat = setup.get("lore", {}).get("main_threat", "").lower()
-    if not any(kw in threat for kw in genre_keywords):
-        errors.append(
-            f"main_threat no contiene ninguna palabra del genero {genre}: "
-            f"found='{threat[:60]}'"
-        )
-    
-    # Check premise
-    premise = setup.get("premise", "").lower()
-    if not any(kw in premise for kw in genre_keywords):
-        errors.append(f"premise no menciona el genero: '{premise[:60]}'")
-    
-    # Check NPCs reference genre
-    npcs = setup.get("lore", {}).get("npcs", [])
-    for npc in npcs:
-        dialogue = npc.get("dialogue", "").lower()
-        if len(dialogue) < 20:  # Too generic
-            errors.append(f"NPC {npc.get('name')} tiene dialogue demasiado corto o generico")
-    
-    return errors
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Legacy world settings (used as fallback)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -444,18 +400,6 @@ No escribas nada más que el JSON."""
         milestone_errors = _validate_milestones(setup)
         if milestone_errors:
             log.warning(f"[MILESTONE] Validation warnings: {'; '.join(milestone_errors)}")
-
-        # ── Genre presence validation: wire result to fallback ────────────
-        # If genre keywords are missing from key fields, trigger Layer 3 fallback
-        genre_errors = _validate_genre_presence(setup, setting)
-        if genre_errors:
-            log.warning(
-                f"[GENRE_VALIDATION] Genre '{setting}' not detected in setup: "
-                f"{'; '.join(genre_errors[:3])} — triggering LLM re-gen fallback"
-            )
-            raise ValueError(
-                f"Genre validation failed for '{setting}': " + "; ".join(genre_errors[:3])
-            )
 
         return setup
 

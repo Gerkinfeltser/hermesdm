@@ -673,13 +673,6 @@ async def cmd_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             preview_text = _format_setup_preview(setup_data)
             await gen_msg.edit_text(preview_text, parse_mode=ParseMode.MARKDOWN)
 
-            # Enviar preview al DM por DM también
-            await context.bot.send_message(
-                chat_id=dm_user_id,
-                text=preview_text + "\n\n_Editá o aprobá desde el grupo_",
-                parse_mode=ParseMode.MARKDOWN,
-            )
-
             # Pedir aprobación
             await update.message.reply_text(
                 "📋 *Preview generado.*\n\n"

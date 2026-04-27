@@ -1174,9 +1174,11 @@ async def cmd_begin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         save_state(cs.active_campaign, state)
 
         # Broadcast to group
+        # Escape underscores in AI narrative to prevent Markdown parse errors
+        safe_narrative = _escape_markdown(narrative)
         msg = (
             f"🎭 *¡La aventura comienza!*\n\n"
-            f"{narrative}\n\n"
+            f"{safe_narrative}\n\n"
             f"_Usá /j para describir tu acción._"
         )
         await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
@@ -1303,8 +1305,7 @@ async def cmd_join(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             sync_chatstate_to_state(cs.active_campaign, cs)
 
         await update.message.reply_text(
-            f"✅ *Character Joined!*\n\n{_fmt_character(char)}",
-            parse_mode=ParseMode.MARKDOWN,
+            f"✅ Character Joined!\n\n{_fmt_character(char)}",
         )
     except Exception as e:
         log.exception("cmd_join error")

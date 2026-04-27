@@ -172,10 +172,13 @@ async def animate_dice_roll(
     2. If NOT needed: edit message directly with final text
     3. If needed: send initial animation message → chain 6 frame edits → final result
     """
+    # Escape underscores in AI-generated content to prevent Markdown parse errors
+    safe_narrative = narrative.replace("_", r"\_") if narrative else narrative
+
     if not _needs_animation(action_type):
         # No animation — send result directly
         final_text = _build_final_text(
-            action_type, character_name, mechanic_inline, narrative, nat_20, nat_1
+            action_type, character_name, mechanic_inline, safe_narrative, nat_20, nat_1
         )
         await context.bot.edit_message_text(
             chat_id=chat_id,
@@ -187,7 +190,7 @@ async def animate_dice_roll(
 
     # Build the final result text upfront (we know the roll already)
     final_text = _build_final_text(
-        action_type, character_name, mechanic_inline, narrative, nat_20, nat_1
+        action_type, character_name, mechanic_inline, safe_narrative, nat_20, nat_1
     )
 
     # Send initial "rolling" message

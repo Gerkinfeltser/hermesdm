@@ -60,7 +60,7 @@ class CampaignSettings:
 
     # === Narrative ===
     narrative_tone: NarrativeTone = NarrativeTone.SERIOUS
-    language: Language = Language.ES
+    language: Language = Language.EN
 
     # === Advanced ===
     # Bonus to all skill checks (for easier/harder parties)

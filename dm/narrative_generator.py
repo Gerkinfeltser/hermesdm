@@ -691,7 +691,7 @@ class NarrativeGenerator:
         state: GameState,
         scene_type: SceneType,
         context: dict | None = None,
-        language: Language = Language.ES,
+        language: Language = Language.EN,
         milestone_context: dict | None = None,
     ) -> dict:
         """
@@ -743,7 +743,7 @@ class NarrativeGenerator:
     def generate_closure(
         self,
         state: GameState,
-        language: Language = Language.ES,
+        language: Language = Language.EN,
     ) -> dict:
         """
         Generate campaign closure (epilogue) narrative.

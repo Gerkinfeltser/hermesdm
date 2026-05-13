@@ -16,7 +16,7 @@ from __future__ import annotations
 from dotenv import load_dotenv
 import os
 # Cargar .env desde la ruta absoluta del proyecto
-load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"), override=True)
 
 from typing import TYPE_CHECKING, Any
 
@@ -4908,10 +4908,10 @@ async def _echo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 def main() -> None:
     """Entry point for the hermesdm CLI command (pip install -e .)."""
     from dotenv import load_dotenv
-    load_dotenv("/home/hermes/hermesdm/.env")
+    load_dotenv(override=True)
 
     logging.basicConfig(
-        level=logging.INFO,
+        level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
         format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
     )
     from bot.version import get_version, format_startup

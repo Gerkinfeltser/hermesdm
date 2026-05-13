@@ -113,6 +113,7 @@ class TestDefaultLanguageEnv:
     def test_default_lang_from_env(self):
         with patch.dict(os.environ, {"DEFAULT_LANGUAGE": "es"}):
             import importlib
+
             import bot.i18n as i18n_mod
             importlib.reload(i18n_mod)
             assert i18n_mod._DEFAULT_LANG.value == "es"
@@ -124,6 +125,7 @@ class TestDefaultLanguageEnv:
             if "DEFAULT_LANGUAGE" in os.environ:
                 del os.environ["DEFAULT_LANGUAGE"]
             import importlib
+
             import bot.i18n as i18n_mod
             importlib.reload(i18n_mod)
             assert i18n_mod._DEFAULT_LANG.value == "en"

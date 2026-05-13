@@ -208,7 +208,10 @@ async def _handle_attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 # ------------------------------------------------------------------
 # !confirm handler (Step 2)
-# ------------------------------------------------------------------(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# ------------------------------------------------------------------
+
+
+async def _handle_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handle !confirm <attack_id>.
 

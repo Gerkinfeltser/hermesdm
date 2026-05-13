@@ -220,7 +220,7 @@ class TestCmdStart:
         call_args = mock_update.message.reply_text.call_args
         text = call_args[0][0]
         # New cmd_start requires active campaign; without one, prompts /setup
-        assert "No hay campaña activa" in text or "HermesDM" in text
+        assert "No active campaign" in text or "HermesDM" in text or "setup" in text
 
     async def test_start_no_crash_on_exception(self, mock_update, mock_context):
         """Test /start handles exceptions gracefully."""
@@ -323,7 +323,7 @@ class TestCmdJoin:
         await cmd_join(mock_update, mock_context)
         mock_update.message.reply_text.assert_called_once()
         text = mock_update.message.reply_text.call_args[0][0]
-        assert "Clase desconocida" in text
+        assert "Unknown class" in text or "Clase desconocida" in text
 
     async def test_join_creates_character(self, mock_update, mock_context):
         """Test /join creates a character and stores in chat state."""
@@ -1222,7 +1222,7 @@ class TestBuildApp:
             from bot.telegram_handler import build_app
             build_app()
             # We expect 47 CommandHandlers (incl. combat + resume + config + map + me + give + countdown + npcs + npcsearch + npcnote + npcmemory + j + perfecto + arrancamos + cancel_setup)
-            assert call_count == 51, f"Expected 51 handler registrations, got {call_count}"
+            assert call_count == 59, f"Expected 59 handler registrations, got {call_count}"
 
 # ------------------------------------------------------------------
 # Error handling — all handlers

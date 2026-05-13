@@ -184,7 +184,8 @@ class CampaignSettings:
                     return False, t("settings_language_invalid", language=lang)
 
             case _:
-                return False, t("settings_unknown_option", language=lang, key=key)
+                # Build message manually to avoid parameter name collision
+                return False, t("settings_unknown_option", language=lang).format(key=key)
 
     def summary(self) -> str:
         """Human-readable current settings."""

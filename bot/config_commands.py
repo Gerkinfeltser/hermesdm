@@ -19,9 +19,8 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
-from state.state_manager import get_settings, update_settings
-
 from bot.i18n import get as t
+from state.state_manager import get_settings, update_settings
 
 HELP_TEXT = textwrap.dedent("""
     ⚙️ */configuracion* — Configurar campaign

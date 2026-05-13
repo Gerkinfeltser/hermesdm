@@ -68,41 +68,41 @@ class TestCampaignSettings:
         s = CampaignSettings(image_generation=False)
         ok, msg = s.apply_update("imagen", "on")
         assert ok is True
-        assert "activada" in msg
+        assert "enabled" in msg
         assert s.image_generation is True
 
     def test_apply_update_imagen_off(self):
         s = CampaignSettings(image_generation=True)
         ok, msg = s.apply_update("imagen", "off")
         assert ok is True
-        assert "desactivada" in msg
+        assert "disabled" in msg
         assert s.image_generation is False
 
     def test_apply_update_free_on(self):
         s = CampaignSettings(image_generation=False)
         ok, msg = s.apply_update("free", "on")
         assert ok is True
-        assert "activada" in msg
+        assert "enabled" in msg
         assert s.image_generation is True
 
     def test_apply_update_free_off(self):
         s = CampaignSettings(image_generation=True)
         ok, msg = s.apply_update("free", "off")
         assert ok is True
-        assert "desactivada" in msg
+        assert "disabled" in msg
         assert s.image_generation is False
 
     def test_apply_update_imagen_invalid_value(self):
         s = CampaignSettings()
         ok, msg = s.apply_update("imagen", "maybe")
         assert ok is False
-        assert "inválido" in msg.lower()
+        assert "invalid" in msg.lower()
 
     def test_apply_update_difficulty_easy(self):
         s = CampaignSettings()
         ok, msg = s.apply_update("dificultad", "easy")
         assert ok is True
-        assert "Fácil" in msg
+        assert "Easy" in msg
         assert s.difficulty == Difficulty.EASY
 
     def test_apply_update_difficulty_invalid(self):
@@ -114,7 +114,7 @@ class TestCampaignSettings:
         s = CampaignSettings()
         ok, msg = s.apply_update("tono", "funny")
         assert ok is True
-        assert "Cómico" in msg
+        assert "Funny" in msg
         assert s.narrative_tone == NarrativeTone.FUNNY
 
     def test_apply_update_tone_dark(self):
@@ -127,7 +127,7 @@ class TestCampaignSettings:
         s = CampaignSettings(turn_timer_seconds=120)
         ok, msg = s.apply_update("timer", "0")
         assert ok is True
-        assert "desactivado" in msg
+        assert "deactivated" in msg
         assert s.turn_timer_seconds == 0
 
     def test_apply_update_timer_positive(self):
@@ -141,7 +141,7 @@ class TestCampaignSettings:
         s = CampaignSettings()
         ok, msg = s.apply_update("timer", "-10")
         assert ok is False
-        assert "negativo" in msg.lower()
+        assert "negative" in msg.lower()
 
     def test_apply_update_suerte_positive(self):
         s = CampaignSettings(luck_bonus=0)
@@ -167,21 +167,21 @@ class TestCampaignSettings:
         s = CampaignSettings()
         ok, msg = s.apply_update("velocidad", "rapida")
         assert ok is False
-        assert "desconocida" in msg.lower()
+        assert "unknown" in msg.lower()
 
     def test_summary(self):
         s = CampaignSettings()
         summary = s.summary()
-        assert "Activada" in summary
+        assert "Enabled" in summary
         assert "Normal" in summary
-        assert "Serio" in summary
+        assert "Serious" in summary
         assert "120s" in summary
-        assert "Sí" in summary
+        assert "Yes" in summary
 
     def test_summary_image_off(self):
         s = CampaignSettings(image_generation=False)
         summary = s.summary()
-        assert "Desactivada" in summary
+        assert "Disabled" in summary
 
     def test_difficulty_dc_modifier(self):
         from campaign_settings import Difficulty_get_dc

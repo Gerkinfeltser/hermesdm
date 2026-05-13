@@ -377,6 +377,7 @@ class OpenAICompatibleProvider(LLMClient):
         temperature: float = 0.8,
     ) -> LLMResponse:
         import json
+        import re
         import time
         import urllib.request
 
@@ -387,10 +388,10 @@ class OpenAICompatibleProvider(LLMClient):
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
-        payload = {
+        payload: dict[str, object] = {
             "model": self.model,
             "messages": messages,
-            "max_tokens": max_tokens,
+            "max_completion_tokens": max_tokens,
             "temperature": temperature,
         }
 
@@ -406,7 +407,7 @@ class OpenAICompatibleProvider(LLMClient):
         )
 
         try:
-            with urllib.request.urlopen(req, timeout=180) as resp:
+            with urllib.request.urlopen(req, timeout=90) as resp:
                 result = json.load(resp)
         except Exception as exc:
             self._log_llm(
@@ -421,6 +422,7 @@ class OpenAICompatibleProvider(LLMClient):
             raise
 
         content = result["choices"][0]["message"]["content"]
+        content = re.sub(r"<think\b[^>]*>.*?</think\s*>", "", content, flags=re.DOTALL).strip()
         usage = result.get("usage")
         latency_ms = (time.perf_counter() - start_ts) * 1000
 

@@ -103,7 +103,7 @@ def _get_narrative_generator() -> NarrativeGenerator:
     """Return a NarrativeGenerator with LLM client connected."""
     global _narrative_generator
     if _narrative_generator is None:
-        client = get_provider("gemini")
+        client = get_provider()
         _narrative_generator = NarrativeGenerator(llm_client=client)
     return _narrative_generator
 

@@ -270,20 +270,15 @@ def generate_setup_with_ai(description: str, tone: str = "serious", setting: str
         main_threat, starting_location, starting_location_desc, npcs)
     """
     import json
-    import os
 
     # Extraer clases del texto antes de generar
     extract_classes_from_text(description)
 
-    # ── Layer 1: AI generation with Gemini ─────────────────────────────────────
+    # ── Layer 1: AI generation ─────────────────────────────────────────────
     try:
-        api_key = os.getenv("GEMINI_API_KEY", "")
-        if not api_key:
-            raise ValueError("No GEMINI_API_KEY set")
+        from dm.provider_client import get_provider
 
-        from dm.provider_client import GeminiProvider
-
-        provider = GeminiProvider(api_key=api_key)
+        provider = get_provider()
 
         prompt = f"""Eres un DM creativo de D&D 5e con 20 años de experiencia.
 
@@ -427,12 +422,11 @@ No escribas nada más que el JSON."""
     except Exception as ai_err:
         # ── Layer 3: Second-chance AI call with simplified prompt ───────────
         try:
-            api_key = os.getenv("GEMINI_API_KEY", "")
-            if api_key:
-                from dm.provider_client import GeminiProvider
-                provider = GeminiProvider(api_key=api_key)
+            from dm.provider_client import get_provider
 
-                fallback_prompt = f"""Crea una campaña de D&D 5e basada en esta idea: {description}
+            provider = get_provider()
+
+            fallback_prompt = f"""Crea una campaña de D&D 5e basada en esta idea: {description}
 
 Responde en JSON:
 {{
@@ -451,58 +445,58 @@ Reglas:
 - NO repitas la idea del usuario.
 - Todo contenido debe ser original y específico.
 """
-                response = provider.text(
-                    fallback_prompt,
-                    system="Eres un DM creativo. Generás campañas originales. Respondés solo en JSON.",
-                    max_tokens=7500,
-                    temperature=0.9,
-                )
-                raw = response.text.strip()
-                if raw.startswith("```"):
-                    lines = raw.split("\n")
-                    raw = "\n".join(lines[1:-1]) if lines[-1] == "```" else "\n".join(lines[1:])
-                parsed = json.loads(raw)
+            response = provider.text(
+                fallback_prompt,
+                system="Eres un DM creativo. Generás campañas originales. Respondés solo en JSON.",
+                max_tokens=7500,
+                temperature=0.9,
+            )
+            raw = response.text.strip()
+            if raw.startswith("```"):
+                lines = raw.split("\n")
+                raw = "\n".join(lines[1:-1]) if lines[-1] == "```" else "\n".join(lines[1:])
+            parsed = json.loads(raw)
 
-                premise = parsed["premise"]
-                if not _is_echo(description, premise):
-                    # Three-step class generation (no silent fallback)
-                    classes = parsed.get("classes")
-                    if not classes:
-                        classes = extract_classes_from_text(description)
-                    if not classes:
-                        classes = _generate_themed_classes(setting, description)
+            premise = parsed["premise"]
+            if not _is_echo(description, premise):
+                # Three-step class generation (no silent fallback)
+                classes = parsed.get("classes")
+                if not classes:
+                    classes = extract_classes_from_text(description)
+                if not classes:
+                    classes = _generate_themed_classes(setting, description)
 
-                    story_arc_data = parsed.get("story_arc")
-                    if story_arc_data:
-                        from dm.story_arc import create_story_arc_from_ai_response
-                        story_arc = create_story_arc_from_ai_response(
-                            pacing_level=story_arc_data.get("pacing_level", pacing_level),
-                            ai_milestones=story_arc_data.get("milestones", []),
-                        )
-                    else:
-                        from dm.story_arc import create_default_story_arc
-                        story_arc = create_default_story_arc(pacing_level)
+                story_arc_data = parsed.get("story_arc")
+                if story_arc_data:
+                    from dm.story_arc import create_story_arc_from_ai_response
+                    story_arc = create_story_arc_from_ai_response(
+                        pacing_level=story_arc_data.get("pacing_level", pacing_level),
+                        ai_milestones=story_arc_data.get("milestones", []),
+                    )
+                else:
+                    from dm.story_arc import create_default_story_arc
+                    story_arc = create_default_story_arc(pacing_level)
 
-                    setup = {
-                        "description": description,
-                        "premise": premise,
-                        "hook": parsed["hook"],
-                        "tone": tone,
-                        "setting_type": parsed["setting_type"],  # Requerido — error si falta
-                        "approved": False,
-                        "classes": classes,
-                        "lore": {
-                            "factions": parsed["factions"],
-                            "main_threat": parsed["main_threat"],
-                            "starting_location": parsed["starting_location"],
-                            "starting_location_desc": parsed["starting_location_desc"],
-                            "npcs": parsed["npcs"],
-                        },
-                        "starting_equipment": parsed.get("starting_equipment", []),
-                        "story_arc": story_arc.to_dict(),
-                    }
-                    setup = _sanitize_setup(setup, description)
-                    return setup
+                setup = {
+                    "description": description,
+                    "premise": premise,
+                    "hook": parsed["hook"],
+                    "tone": tone,
+                    "setting_type": parsed["setting_type"],
+                    "approved": False,
+                    "classes": classes,
+                    "lore": {
+                        "factions": parsed["factions"],
+                        "main_threat": parsed["main_threat"],
+                        "starting_location": parsed["starting_location"],
+                        "starting_location_desc": parsed["starting_location_desc"],
+                        "npcs": parsed["npcs"],
+                    },
+                    "starting_equipment": parsed.get("starting_equipment", []),
+                    "story_arc": story_arc.to_dict(),
+                }
+                setup = _sanitize_setup(setup, description)
+                return setup
         except Exception:
             pass  # Fall through to error propagation
 

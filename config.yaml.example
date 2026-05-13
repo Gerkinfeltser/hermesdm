@@ -10,6 +10,25 @@ bot:
   # Admin user IDs for /audit and admin commands
   admin_user_ids: []
 
+# LLM provider for AI narration, world building, and dialogue
+# Env vars take priority over config.yaml values.
+llm:
+  # Provider: "auto" (detect from env vars), "openai", "minimax", "gemini"
+  # - "auto" tries LLM_API_KEY → OPENROUTER_API_KEY → MINIMAX_API_KEY → GEMINI_API_KEY
+  provider: "auto"
+  # API key (or set LLM_API_KEY env var)
+  # api_key: "your-key-here"
+  # Base URL for OpenAI-compatible endpoints (or set LLM_BASE_URL env var)
+  # Examples:
+  #   OpenRouter: https://openrouter.ai/api/v1
+  #   z.ai:       https://api.z.ai/v1
+  #   MiniMax:    https://api.minimax.chat/v1
+  #   Ollama:     http://localhost:11434/v1
+  #   OpenAI:     https://api.openai.com/v1
+  # base_url: "https://openrouter.ai/api/v1"
+  # Model ID (or set LLM_MODEL env var)
+  # model: "minimax/minimax-m2.7"
+
 # Image generation provider
 # Options: pollinations (default/free), minimax, flux, nanobanana, fal
 image_provider: "pollinations"

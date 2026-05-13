@@ -324,31 +324,233 @@ class GeminiProvider(LLMClient):
         )
 
 
+# ── Generic OpenAI-Compatible Provider ────────────────────────────────────────
+
+class OpenAICompatibleProvider(LLMClient):
+    """
+    Generic OpenAI-compatible provider.
+
+    Works with any endpoint that implements the /chat/completions API:
+    z.ai, MiniMax, OpenRouter, OpenAI, Ollama, vLLM, etc.
+
+    Env vars (override constructor args):
+        LLM_API_KEY  — API key (required for most providers)
+        LLM_BASE_URL — Base URL (default: https://openrouter.ai/api/v1)
+        LLM_MODEL    — Model ID (default: minimax/minimax-m2.7)
+
+    Also checks legacy vars: OPENROUTER_API_KEY, MINIMAX_API_KEY, OPENROUTER_BASE_URL.
+    """
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        model: str | None = None,
+    ) -> None:
+        import os
+
+        self.api_key = (
+            api_key
+            or os.getenv("LLM_API_KEY", "")
+            or os.getenv("OPENROUTER_API_KEY", "")
+            or os.getenv("MINIMAX_API_KEY", "")
+            or os.getenv("GEMINI_API_KEY", "")
+        )
+        self.base_url = (
+            base_url
+            or os.getenv("LLM_BASE_URL", "")
+            or os.getenv("OPENROUTER_BASE_URL", "")
+            or "https://openrouter.ai/api/v1"
+        )
+        self.model = (
+            model
+            or os.getenv("LLM_MODEL", "")
+            or os.getenv("MINIMAX_MODEL", "")
+            or "minimax/minimax-m2.7"
+        )
+
+    def text(
+        self,
+        prompt: str,
+        system: str | None = None,
+        max_tokens: int = 256,
+        temperature: float = 0.8,
+    ) -> LLMResponse:
+        import json
+        import time
+        import urllib.request
+
+        start_ts = time.perf_counter()
+
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/chat/completions",
+            data=data,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                result = json.load(resp)
+        except Exception as exc:
+            self._log_llm(
+                prompt=prompt,
+                system=system,
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                latency_ms=(time.perf_counter() - start_ts) * 1000,
+                error=str(exc),
+            )
+            raise
+
+        content = result["choices"][0]["message"]["content"]
+        usage = result.get("usage")
+        latency_ms = (time.perf_counter() - start_ts) * 1000
+
+        self._log_llm(
+            prompt=prompt,
+            system=system,
+            model=self.model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            response_text=content,
+            usage=usage,
+            latency_ms=latency_ms,
+        )
+
+        return LLMResponse(
+            text=content,
+            raw=result,
+            model=self.model,
+            usage=usage,
+            latency_ms=latency_ms,
+        )
+
+    def _log_llm(
+        self,
+        *,
+        prompt: str,
+        system: str | None,
+        model: str,
+        max_tokens: int,
+        temperature: float,
+        response_text: str | None = None,
+        usage: dict | None = None,
+        latency_ms: float | None = None,
+        error: str | None = None,
+    ) -> None:
+        try:
+            import sys
+            from pathlib import Path
+
+            project_root = Path(__file__).parent.parent
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+
+            from bot.audit_logger import get_audit_logger
+
+            audit = get_audit_logger()
+
+            max_prompt_len = 8000
+            max_response_len = 8000
+
+            prompt_snip = prompt[:max_prompt_len] + ("..." if len(prompt) > max_prompt_len else "")
+            system_snip = (system[:max_prompt_len] + ("..." if len(system) > max_prompt_len else "")) if system else None
+            response_snip = (response_text[:max_response_len] + ("..." if len(response_text) > max_response_len else "")) if response_text else None
+
+            metadata: dict[str, Any] = {
+                "model": model,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "latency_ms": round(latency_ms, 2) if latency_ms is not None else None,
+            }
+
+            if usage:
+                metadata["usage"] = usage
+            if error:
+                metadata["error"] = error
+
+            audit.log_event(
+                event_type="llm_call",
+                input=prompt_snip,
+                output=response_snip,
+                metadata=metadata,
+            )
+        except Exception:
+            pass
+
+
+# ── Auto-detect best available provider ───────────────────────────────────────
+
+def get_auto_provider() -> LLMClient:
+    """
+    Auto-detect and return the best available LLM provider.
+
+    Priority:
+        1. LLM_API_KEY + LLM_BASE_URL (generic OpenAI-compatible)
+        2. OPENROUTER_API_KEY or MINIMAX_API_KEY → MiniMax via OpenRouter
+        3. GEMINI_API_KEY → GeminiProvider
+        4. Raises ValueError if nothing configured
+    """
+    import os
+
+    if os.getenv("LLM_API_KEY") or os.getenv("LLM_BASE_URL"):
+        return OpenAICompatibleProvider()
+
+    if os.getenv("OPENROUTER_API_KEY") or os.getenv("MINIMAX_API_KEY"):
+        return MiniMaxProvider()
+
+    if os.getenv("GEMINI_API_KEY"):
+        return GeminiProvider()
+
+    raise ValueError(
+        "No LLM provider configured. Set one of: "
+        "LLM_API_KEY + LLM_BASE_URL, OPENROUTER_API_KEY, MINIMAX_API_KEY, or GEMINI_API_KEY"
+    )
+
+
 # ── Provider factory ─────────────────────────────────────────────────────────
 
-def get_provider(name: str, **kwargs) -> LLMClient:
+def get_provider(name: str | None = None, **kwargs) -> LLMClient:
     """
-    Get an LLM provider by name.
+    Get an LLM provider by name, or auto-detect if name is None/"auto".
 
     Args:
-        name: Provider name (e.g. "minimax", "openai", "glm")
+        name: Provider name (e.g. "minimax", "gemini", "openai", "auto")
+              If None or "auto", auto-detects from available env vars.
         **kwargs: Additional arguments passed to the provider constructor
 
     Returns:
         LLMClient instance
 
     Raises:
-        ValueError: If provider is not supported
+        ValueError: If provider is not supported or no keys configured
     """
+    if name is None or name.lower() == "auto":
+        return get_auto_provider()
+
     name = name.lower()
     if name == "minimax":
         return MiniMaxProvider(**kwargs)
     if name == "gemini":
         return GeminiProvider(**kwargs)
-    # Agregar otros providers aquí
-    # elif name == "openai":
-    #     return OpenAIProvider(**kwargs)
-    # elif name == "glm":
-    #     return GLMProvider(**kwargs)
-    else:
-        raise ValueError(f"Unknown provider: {name}. Supported: minimax, gemini")
+    if name in ("openai", "openai-compatible", "compatible"):
+        return OpenAICompatibleProvider(**kwargs)
+    raise ValueError(f"Unknown provider: {name}. Supported: minimax, gemini, openai, auto")

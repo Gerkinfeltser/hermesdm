@@ -254,7 +254,7 @@ def _generate_procedural_npcs(description: str, count: int = 3) -> list[dict]:
     return npcs
 
 
-def generate_setup_with_ai(description: str, tone: str = "serious", setting: str = "fantasy", pacing_level: str = "medium") -> dict:
+def generate_setup_with_ai(description: str, tone: str = "serious", setting: str = "fantasy", pacing_level: str = "medium", language: str = "en") -> dict:
     """
     Generate campaign setup (premise, hook, lore, factions, NPCs) using AI.
     NO fallbacks — si falta un campo requerido, lanza KeyError.
@@ -280,7 +280,13 @@ def generate_setup_with_ai(description: str, tone: str = "serious", setting: str
 
         provider = get_provider()
 
-        prompt = f"""Eres un DM creativo de D&D 5e con 20 años de experiencia.
+        _es_system = "Eres un DM creativo de D&D 5e. Generás campañas originales. Nunca repetís el input del usuario. Respondés solo en JSON válido."
+        _en_system = "You are a creative D&D 5e DM. You create original campaigns. You never repeat the user's input. You respond only in valid JSON."
+        _es_close = "No escribas nada más que el JSON."
+        _en_close = "Write nothing else but the JSON."
+
+        if language == "es":
+            prompt = f"""Eres un DM creativo de D&D 5e con 20 años de experiencia.
 
 CRÍTICO — Reglas de oro:
 1. NUNCA repitas, copies ni parafrasees el texto del usuario. Inventá TODO: nombres, lugares, descripciones.
@@ -350,12 +356,84 @@ Respondé ÚNICAMENTE en JSON válido con este formato exacto:
     ]
   }}
 }}
-No escribas nada más que el JSON."""
+{_es_close}"""
+        else:
+            prompt = f"""You are a creative D&D 5e DM with 20 years of experience.
+
+CRITICAL — Golden rules:
+1. NEVER repeat, copy, or paraphrase the user's text. Invent EVERYTHING: names, places, descriptions.
+2. NEVER use words from the user's input as proper names for places or NPCs.
+   Example input: "I want a story about teens in a VR game"
+   → BAD: place = "Lands of Teens", NPC = "Game"
+   → GOOD: place = "The Crystal Dome", NPC = "Rika, the digital courier"
+3. Detect the genre and use it as setting_type:
+   - VR/AI/network/digital/cyberpunk/post-apocalyptic → "scifi"
+   - magic/dragons/kingdoms/castles/swords → "fantasy"
+   - zombies/apocalypse/survival → "zombie"
+   - horror/dark/cursed/terror/psychological → "horror"
+   - pirates/corsairs/seas/sailing → "pirate"
+   - vampire/werewolf → "horror"
+   - DEFAULT if none → "fantasy"
+
+DM IDEA (inspiration only, DO NOT copy):
+{description}
+
+---
+
+Generate a COMPLETE campaign in English. Each field must be original, creative, and specific. No generic text.
+
+1. **premise** (2-3 sentences): Who are the PCs and what unites them? Use setting-specific vocabulary. Do NOT mention "generic adventurers".
+2. **hook** (2 sentences): What disruptive event starts the adventure? Must be concrete and urgent.
+3. **starting_location** (proper name): A specific place with an INVENTED proper name. Do NOT use "a forgotten place" or input words.
+4. **starting_location_desc** (2-3 sentences): Sensory and atmospheric description of the place.
+5. **main_threat** (1 sentence): The central threat with a proper name if applicable.
+6. **factions** (2-3): Name + status (DOMINANT/RISING/HIDDEN/CORRUPT/etc). Must be in conflict.
+7. **npcs** (2-3): INVENTED proper names, specific role, and one line of dialogue that reveals personality. Must be related to the setting.
+8. **classes** (3-5): Thematic class names that fit the setting. Do NOT use "Fighter/Wizard/Rogue" unless generic fantasy.
+9. **story_arc**: Milestones per pacing_level={pacing_level}. Each milestone must have a concrete description of >30 words. Include "unlock_flags" in each milestone (flags activated on completion).
+
+10. **locations**: Generate 3-8 connected locations with "connections" and "prerequisites".
+Location format:
+  {{
+    "name": "Zenith Tower",
+    "description": "...",
+    "connections": ["Dark Forest", "Crypt"],
+    "prerequisites": [],
+    "locked_until_flag": null,
+    "distance_from_previous": 2,
+    "obstacles": ["sealed door", "guards"]
+  }}
+Each location MUST connect to at least one other. Starting location with empty connections is valid.
+Advanced locations (final boss, treasure) must have prerequisites or locked_until_flag.
+
+Respond ONLY in valid JSON with this exact format:
+{{
+  "setting_type": "fantasy|scifi|horror|zombie|pirate",
+  "hook": "...",
+  "starting_location": "...",
+  "starting_location_desc": "...",
+  "main_threat": "...",
+  "factions": {{ "faction_name": "STATUS", ... }},
+  "npcs": [{{ "name": "...", "role": "...", "dialogue": "..." }}, ...],
+  "classes": ["Class1", "Class2", "Class3"],
+  "locations": [
+    {{ "name": "...", "description": "...", "connections": [], "prerequisites": [], "locked_until_flag": null, "distance_from_previous": 1, "obstacles": [] }}
+  ],
+  "story_arc": {{
+    "pacing_level": "{pacing_level}",
+    "milestones": [
+      {{ "id": "hook", "type": "hook", "description": "..." }},
+      {{ "id": "rising_action", "type": "rising_action", "description": "..." }},
+      ...
+    ]
+  }}
+}}
+{_en_close}"""
 
         response = provider.text(
             prompt,
-            system="Eres un DM creativo de D&D 5e. Generás campañas originales. Nunca repetís el input del usuario. Respondés solo en JSON válido.",
-            max_tokens=7500,
+            system=_es_system if language == "es" else _en_system,
+            max_tokens=2000,
             temperature=0.85,
         )
 

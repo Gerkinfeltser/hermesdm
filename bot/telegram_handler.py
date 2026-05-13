@@ -625,10 +625,13 @@ async def cmd_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_data["_hermes_state"] = cs
 
         # Mensaje de generando
-        gen_msg = await update.message.reply_text("🎲 Generando con AI...")
+        gen_msg = await update.message.reply_text(t("cmd_setup_generating"))
 
         try:
-            setup_data = generate_setup_with_ai(description, pacing_level=pacing_level)
+            from state.state_manager import get_settings
+            _settings = get_settings(cs.active_campaign) if cs.active_campaign else None
+            _lang = _settings.language.value if _settings else "en"
+            setup_data = generate_setup_with_ai(description, pacing_level=pacing_level, language=_lang)
             setup_data["pacing_level"] = pacing_level
             cs.pending_setup = setup_data
             cs.setup_state = "preview"
@@ -766,7 +769,10 @@ async def _handle_setup_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
             gen_msg = await update.message.reply_text(t("cmd_setup_generating"))
 
             try:
-                setup_data = generate_setup_with_ai(description)
+                from state.state_manager import get_settings
+                _s2 = get_settings(cs.active_campaign) if cs.active_campaign else None
+                _l2 = _s2.language.value if _s2 else "en"
+                setup_data = generate_setup_with_ai(description, language=_l2)
                 cs.pending_setup = setup_data
                 cs.setup_state = "preview"
                 chat_data["_hermes_state"] = cs

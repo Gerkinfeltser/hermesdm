@@ -25,6 +25,7 @@ from telegram.ext import (
 
 from bot.combat_engine import resolve_attack
 from bot.dice_engine import roll as _roll
+from bot.i18n import get as t
 
 log = logging.getLogger(__name__)
 
@@ -59,14 +60,15 @@ class PendingAttack:
         elif self.disadvantage:
             adv_note = " (DIS)"
 
-        return (
-            f"⚔️ *Pending Attack*\n"
-            f"Attacker: {self.attacker_name}\n"
-            f"Target: {self.defender_name}\n"
-            f"Weapon: {self.weapon}\n"
-            f"Defender AC: {self.defender_ac}\n"
-            f"Dice: {self.dice_notation}{adv_note}\n"
-            f"ID: `{self.attack_id}`"
+        return t(
+            "game_attack_summary",
+            attacker=self.attacker_name,
+            target=self.defender_name,
+            weapon=self.weapon,
+            ac=self.defender_ac,
+            dice=self.dice_notation,
+            adv_note=adv_note,
+            id=self.attack_id,
         )
 
 
@@ -116,9 +118,7 @@ async def _handle_attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         if len(parts) < 3:
             await update.message.reply_text(
-                "⚔️ Uso: `!attack [objetivo] [CA] [arma?] [--adv?--dis?]`\n"
-                "Ejemplo: `!attack Orco 16 longsword --adv`\n"
-                "Arma default: sword | CA default: 10",
+                t("game_attack_usage"),
                 parse_mode="Markdown",
             )
             return
@@ -132,7 +132,7 @@ async def _handle_attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 raise ValueError("AC must be positive")
         except (ValueError, IndexError):
             await update.message.reply_text(
-                "⚔️ CA debe ser un número. Ejemplo: `!attack Orco 16`",
+                t("game_ac_must_be_number"),
                 parse_mode="Markdown",
             )
             return
@@ -194,27 +194,21 @@ async def _handle_attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         confirm_id = f"confirm_{attack_id}"
 
         await update.message.reply_text(
-            f"🎯 *Attack Prepared!*\n\n"
-            f"{pending.to_summary()}\n\n"
-            f"Reply with `!confirm {confirm_id}` to resolve this attack, "
-            f"or `!cancel` to cancel.",
+            t("game_attack_prepared", summary=pending.to_summary(), confirm_id=confirm_id),
             parse_mode="Markdown",
         )
 
     except Exception as e:
         log.exception("!attack handler error")
         try:
-            await update.message.reply_text(f"Error: {e}")
+            await update.message.reply_text(t("error_generic", e=str(e)))
         except Exception:
             pass
 
 
 # ------------------------------------------------------------------
 # !confirm handler (Step 2)
-# ------------------------------------------------------------------
-
-
-async def _handle_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# ------------------------------------------------------------------(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handle !confirm <attack_id>.
 
@@ -229,8 +223,7 @@ async def _handle_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         if len(parts) < 2:
             await update.message.reply_text(
-                "Usage: `!confirm <attack_id>`\n"
-                "Use the attack ID shown when you created the attack.",
+                t("game_confirm_usage"),
                 parse_mode="Markdown",
             )
             return
@@ -248,8 +241,7 @@ async def _handle_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         if attack_id not in attacks:
             await update.message.reply_text(
-                f"❌ No pending attack found with ID `{attack_id}`.\n"
-                f"Use `!attack <target>` to start a new attack.",
+                t("game_no_pending_attack", id=attack_id),
                 parse_mode="Markdown",
             )
             return
@@ -317,7 +309,7 @@ async def _handle_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     except Exception as e:
         log.exception("!confirm handler error")
         try:
-            await update.message.reply_text(f"Error: {e}")
+            await update.message.reply_text(t("error_generic", e=str(e)))
         except Exception:
             pass
 
@@ -337,16 +329,16 @@ async def _handle_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             count = len(_pending_attacks[chat_id])
             _pending_attacks[chat_id].clear()
             await update.message.reply_text(
-                f"✅ Cancelled {count} pending attack(s).",
+                t("game_cancelled_attacks", count=count),
             )
         else:
             await update.message.reply_text(
-                "No pending attacks to cancel.",
+                t("game_no_attacks_to_cancel"),
             )
     except Exception as e:
         log.exception("!cancel handler error")
         try:
-            await update.message.reply_text(f"Error: {e}")
+            await update.message.reply_text(t("error_generic", e=str(e)))
         except Exception:
             pass
 
@@ -366,12 +358,12 @@ async def _handle_attack_status(update: Update, context: ContextTypes.DEFAULT_TY
 
         if not attacks:
             await update.message.reply_text(
-                "No pending attacks. Use `!attack <target>` to start one.",
+                t("game_no_pending_attacks"),
                 parse_mode="Markdown",
             )
             return
 
-        lines = ["⚔️ *Pending Attacks*", ""]
+        lines = [t("game_pending_attacks_header"), ""]
         for aid, attack in attacks.items():
             lines.append(attack.to_summary())
             lines.append("")
@@ -381,7 +373,7 @@ async def _handle_attack_status(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         log.exception("!attack_status handler error")
         try:
-            await update.message.reply_text(f"Error: {e}")
+            await update.message.reply_text(t("error_generic", e=str(e)))
         except Exception:
             pass
 

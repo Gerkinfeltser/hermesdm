@@ -21,6 +21,8 @@ from telegram.ext import ContextTypes
 
 from state.state_manager import get_settings, update_settings
 
+from bot.i18n import get as t
+
 HELP_TEXT = textwrap.dedent("""
     ⚙️ */configuracion* — Configurar campaign
 
@@ -48,7 +50,7 @@ async def cmd_configuracion(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
         if cs is None or cs.active_campaign is None:
             await update.message.reply_text(
-                "No hay campaign activa. Usa /newgame para crear una.",
+                t("config_no_campaign"),
                 parse_mode=ParseMode.MARKDOWN,
             )
             return
@@ -96,7 +98,7 @@ async def cmd_configuracion(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 )
             else:
                 await update.message.reply_text(
-                    f"Opción desconocida: *{key}*\n\n{HELP_TEXT}",
+                    t("config_unknown_option", key=key, help_text=HELP_TEXT),
                     parse_mode=ParseMode.MARKDOWN,
                 )
             return
@@ -106,12 +108,12 @@ async def cmd_configuracion(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
         if success:
             await update.message.reply_text(
-                f"✅ {message}",
+                t("config_success", message=message),
                 parse_mode=ParseMode.MARKDOWN,
             )
         else:
             await update.message.reply_text(
-                f"❌ {message}\n\n{HELP_TEXT}",
+                t("config_error", message=message, help_text=HELP_TEXT),
                 parse_mode=ParseMode.MARKDOWN,
             )
 
@@ -119,6 +121,6 @@ async def cmd_configuracion(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         import logging
         logging.exception("cmd_configuracion error")
         try:
-            await update.message.reply_text(f"Error: {e}")
+            await update.message.reply_text(t("error_generic", e=str(e)))
         except Exception:
             pass

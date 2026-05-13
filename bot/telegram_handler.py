@@ -60,6 +60,7 @@ from bot.combat_engine import (
 )
 from bot.character_sheet import DeathSaves
 from bot.config_commands import cmd_configuracion
+from bot.i18n import get as t
 
 # Local modules
 from bot.dice_engine import roll as _roll
@@ -443,7 +444,7 @@ async def _maybe_send_scene_image(
             await context.bot.send_photo(
                 chat_id=chat_id,
                 photo=f,
-                caption=f"🎨 *{provider_name}* — _Generada automaticamente_",
+                caption=t("image_auto_caption", provider=provider_name),
                 parse_mode=ParseMode.MARKDOWN,
             )
 
@@ -455,7 +456,7 @@ async def _maybe_send_scene_image(
 def _fmt_combat_summary(cs: CombatState) -> str:
     """Format active combat state."""
     if cs is None or not cs.active:
-        return "No active combat."
+        return t("combat_no_active")
     return combat_summary(cs)
 
 
@@ -468,25 +469,12 @@ def _fmt_combat_summary(cs: CombatState) -> str:
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start."""
     try:
-        welcome = textwrap.dedent("""
-            🎲 *HermesDM — AI Dungeon Master*
-
-            Welcome, adventurer! I am your AI-powered dungeon master,
-            ready to run epic tabletop RPG campaigns right here in Telegram.
-
-            *Quick Start:*
-            1. /setup — Create a new campaign (describe it in Spanish!)
-            2. /join — Add your character to the campaign
-            3. /campaign — View campaign details
-            4. /help — Full command list
-
-            May fortune favor the bold!
-        """).strip()
+        welcome = t("cmd_start_welcome")
         await update.message.reply_text(welcome, parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
         log.exception("cmd_start error")
         try:
-            await update.message.reply_text(f"Error: {e}")
+            await update.message.reply_text(t("error_generic", e=str(e)))
         except Exception:
             pass  # Already failing, give up silently
 
@@ -547,7 +535,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         log.exception("cmd_help error")
         try:
-            await update.message.reply_text(f"Error: {e}")
+            await update.message.reply_text(t("error_generic", e=str(e)))
         except Exception:
             pass  # Already failing, give up silently
 
@@ -564,7 +552,7 @@ async def cmd_version(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     except Exception:
         log.exception("cmd_version error")
         try:
-            await update.message.reply_text("Error mostrando versión.")
+            await update.message.reply_text(t("cmd_version_error"))
         except Exception:
             pass
 
@@ -573,14 +561,10 @@ async def cmd_version(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def cmd_newgame(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /newgame [setting] — deprecated, use /setup instead."""
     try:
-        await update.message.reply_text(
-            "⚠️ Este comando está deprecated.\n"
-            "Usá `/setup` para crear una nueva campaña con descripción libre y generación AI.\n"
-            "Ejemplo: `/setup quiero una campaña dark fantasy en un puerto corrupto`"
-        )
+        await update.message.reply_text(t("cmd_newgame_deprecated"))
     except Exception as e:
         log.exception("cmd_newgame error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 async def cmd_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -604,7 +588,7 @@ async def cmd_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             state = load_state(cs.active_campaign)
             if state and state.get("campaign", {}).get("status") == "active":
                 await update.message.reply_text(
-                    "⚠️ Ya hay una campaña activa. Cerrala con /end antes de crear una nueva."
+                    t("cmd_setup_already_active")
                 )
                 return
 
@@ -624,16 +608,7 @@ async def cmd_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         if not description:
             await update.message.reply_text(
-                "⚠️ *Setup de Campaña*\n\n"
-                "Usá: `/setup <descripción>`\n\n"
-                "Ejemplos:\n"
-                "- `/setup dark fantasy en un puerto corrupto`\n"
-                "- `/setup oneshot de terror en una mansión abandonada`\n\n"
-                "Opciones de duración:\n"
-                "- `--short` → ~5 sesiones (one-shot)\n"
-                "- `--medium` → ~10 sesiones (default)\n"
-                "- `--long` → ~20 sesiones (campaña épica)\n\n"
-                "Incluí: tono, setting, tipo de aventura.",
+                t("cmd_setup_usage"),
                 parse_mode=ParseMode.MARKDOWN,
             )
             return
@@ -682,13 +657,7 @@ async def cmd_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
             # Pedir aprobación
             await update.message.reply_text(
-                "📋 *Preview generado.*\n\n"
-                "Editá campos con:\n"
-                "`edit premisa: ...`\n"
-                "`edit hook: ...`\n"
-                "`edit tono: dark`\n\n"
-                "Cuando estés listo: `/perfecto` / `/arrancamos`\n"
-                "Para cancelar: `/cancel`",
+                t("cmd_setup_preview_instructions"),
                 parse_mode=ParseMode.MARKDOWN,
             )
 
@@ -698,16 +667,13 @@ async def cmd_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             cs.setup_mode = False
             chat_data["_hermes_state"] = cs
             await gen_msg.edit_text(
-                f"⚠️ Error en generación de setup.\n\n"
-                f"Descripción: {description}\n"
-                f"Error: {ai_err}\n\n"
-                f"Revisá la API key y volvé a intentar con /setup.",
+                t("cmd_setup_generation_error", description=description, ai_err=str(ai_err)),
                 parse_mode=ParseMode.MARKDOWN,
             )
 
     except Exception as e:
         log.exception("cmd_setup error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 async def _handle_setup_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -744,8 +710,7 @@ async def _handle_setup_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
             valid_fields = {"premise", "hook", "tone", "setting", "descripcion", "description", "clases", "classes"}
             if field not in valid_fields:
                 await update.message.reply_text(
-                    f"Campo no reconocido: `{field}`. "
-                    "Campos editables: premise, hook, tono, setting",
+                    t("setup_field_unknown", field=field),
                     parse_mode=ParseMode.MARKDOWN,
                 )
                 return
@@ -772,7 +737,7 @@ async def _handle_setup_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     save_state(cs.active_campaign, st)
 
                 await update.message.reply_text(
-                    f"✅ `{field}` actualizado a: {value}",
+                    t("setup_field_updated", field=field, value=value),
                     parse_mode=ParseMode.MARKDOWN,
                 )
             return
@@ -788,7 +753,7 @@ async def _handle_setup_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
             cs.setup_state = "idle"
             cs.pending_setup = None
             chat_data["_hermes_state"] = cs
-            await update.message.reply_text("❌ Setup cancelado.")
+            await update.message.reply_text(t("setup_canceled"))
             return
 
         # --- Free text: use as new description and regenerate ---
@@ -796,7 +761,7 @@ async def _handle_setup_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
             cs.setup_state = "generating"
             chat_data["_hermes_state"] = cs
 
-            gen_msg = await update.message.reply_text("🎲 Generando con AI...")
+            gen_msg = await update.message.reply_text(t("cmd_setup_generating"))
 
             try:
                 setup_data = generate_setup_with_ai(description)
@@ -826,15 +791,12 @@ async def _handle_setup_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
                 await context.bot.send_message(
                     chat_id=dm_user_id,
-                    text=preview_text + "\n\n_Editá o aprobá desde el grupo_",
+                    text=preview_text + "\n\n" + t("setup_edit_approve_group"),
                     parse_mode=ParseMode.MARKDOWN,
                 )
 
                 await update.message.reply_text(
-                    "📋 *Preview generado.*\n\n"
-                    "Editá: `edit premisa: ...`, `edit tono: dark`\n"
-                    "Aprobá: `perfecto` / `arrancamos`\n"
-                    "Cancelá: `cancel`",
+                    t("setup_preview_generated"),
                     parse_mode=ParseMode.MARKDOWN,
                 )
             except Exception as ai_err:
@@ -843,7 +805,7 @@ async def _handle_setup_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 cs.setup_mode = False
                 chat_data["_hermes_state"] = cs
                 await gen_msg.edit_text(
-                    f"⚠️ No pude conectar con AI: {ai_err}",
+                    t("setup_ai_connection_error", ai_err=str(ai_err)),
                     parse_mode=ParseMode.MARKDOWN,
                 )
             return
@@ -851,7 +813,7 @@ async def _handle_setup_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         log.exception("_handle_setup_text error")
         try:
-            await update.message.reply_text(f"Error: {e}")
+            await update.message.reply_text(t("error_generic", e=str(e)))
         except Exception:
             pass
 
@@ -862,12 +824,12 @@ async def _cmd_approve_setup(update: Update, context: ContextTypes.DEFAULT_TYPE)
         chat_data = context.chat_data
         cs: ChatState = chat_data.get("_hermes_state", ChatState())
         if not cs.setup_mode:
-            await update.message.reply_text("No hay un setup activo. Usá /setup para empezar.")
+            await update.message.reply_text(t("setup_no_active_setup"))
             return
         await _approve_setup(update, context, cs)
     except Exception as e:
         log.exception("_cmd_approve_setup error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 async def _cmd_cancel_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -876,16 +838,16 @@ async def _cmd_cancel_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         chat_data = context.chat_data
         cs: ChatState = chat_data.get("_hermes_state", ChatState())
         if not cs.setup_mode:
-            await update.message.reply_text("No hay un setup activo para cancelar.")
+            await update.message.reply_text(t("setup_no_active_to_cancel"))
             return
         cs.setup_mode = False
         cs.setup_state = "idle"
         cs.pending_setup = None
         chat_data["_hermes_state"] = cs
-        await update.message.reply_text("❌ Setup cancelado.")
+        await update.message.reply_text(t("setup_canceled"))
     except Exception as e:
         log.exception("_cmd_cancel_setup error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 async def _approve_setup(update: Update, context: ContextTypes.DEFAULT_TYPE, cs: ChatState) -> None:
@@ -894,7 +856,7 @@ async def _approve_setup(update: Update, context: ContextTypes.DEFAULT_TYPE, cs:
         from state.state_manager import load_state, save_state
 
         if not cs.pending_setup or not cs.active_campaign:
-            await update.message.reply_text("❌ No hay setup pendiente para aprobar.")
+            await update.message.reply_text(t("setup_no_pending"))
             return
 
         campaign_id = cs.active_campaign
@@ -967,14 +929,12 @@ async def _approve_setup(update: Update, context: ContextTypes.DEFAULT_TYPE, cs:
         await _publish_setup_to_group(context, update.effective_chat.id, setup_data)
 
         await update.message.reply_text(
-            "✅ *Campaña publicada!* "
-            "Los jugadores usan /join para registrarse.\n"
-            "Cuando todos estén listos, el DM usa /start para iniciar la aventura.",
+            t("setup_campaign_published"),
             parse_mode=ParseMode.MARKDOWN,
         )
     except Exception as e:
         log.exception("_approve_setup error")
-        await update.message.reply_text(f"Error al aprobar setup: {e}")
+        await update.message.reply_text(t("setup_approve_error", e=str(e)))
 
 
 def _escape_markdown(text: str) -> str:
@@ -1122,7 +1082,7 @@ async def cmd_begin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         if not cs.active_campaign:
             await update.message.reply_text(
-                "⚠️ No hay campaña activa. Usá /setup para crear una."
+                t("cmd_imagen_no_campaign")
             )
             return
 
@@ -1130,26 +1090,26 @@ async def cmd_begin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         state = load_state(cs.active_campaign)
         if state is None:
-            await update.message.reply_text("⚠️ Campaña no encontrada.")
+            await update.message.reply_text(t("campaign_not_found"))
             return
 
         campaign_status = state.get("campaign", {}).get("status", "active")
         if campaign_status == "setup":
             await update.message.reply_text(
-                "⚠️ La campaña aún está en setup. Aprobalá con `perfecto` primero."
+                t("cmd_begin_still_in_setup")
             )
             return
 
         if state.get("adventure_started"):
             await update.message.reply_text(
-                "🎭 La aventura ya comenzó. Usá /recap para recordar o /j para actuar."
+                t("cmd_begin_already_started")
             )
             return
 
         characters = state.get("characters", {})
         if not characters:
             await update.message.reply_text(
-                "⚠️ No hay personajes registrados. Usá /join primero."
+                t("cmd_begin_no_characters")
             )
             return
 
@@ -1208,16 +1168,12 @@ async def cmd_begin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # Broadcast to group
         # Escape underscores in AI narrative to prevent Markdown parse errors
         safe_narrative = _escape_markdown(narrative)
-        msg = (
-            f"🎭 *¡La aventura comienza!*\n\n"
-            f"{safe_narrative}\n\n"
-            f"_Usá /j para describir tu acción._"
-        )
+        msg = t("cmd_begin_adventure_starts", narrative=safe_narrative)
         await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
     except Exception as e:
         log.exception("cmd_begin error")
-        await update.message.reply_text(f"Error al iniciar aventura: {e}")
+        await update.message.reply_text(t("cmd_begin_error", e=str(e)))
 
 
 @with_audit("cmd_join")
@@ -1234,8 +1190,7 @@ async def cmd_join(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             st = load_state(cs.active_campaign)
             if st and st.get("campaign", {}).get("status") == "setup":
                 await update.message.reply_text(
-                    "⚠️ La campaña aún no está lista.\n"
-                    "Esperá a que el DM la configure y apruebe."
+                    t("cmd_join_not_ready")
                 )
                 return
 
@@ -1251,9 +1206,7 @@ async def cmd_join(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     if camp_classes:
                         class_help = f"Clases para esta campaña: {', '.join(camp_classes)}"
             await update.message.reply_text(
-                "Usage: /join <name> <class> [level]\n"
-                f"Example: /join Valdric fighter 3\n"
-                f"{class_help}"
+                t("cmd_join_usage", class_help=class_help)
             )
             return
 
@@ -1296,9 +1249,7 @@ async def cmd_join(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             default_names = list(CLASS_DEFINITIONS.keys())
             all_names = available + default_names if available else default_names
             await update.message.reply_text(
-                f"❓ Clase desconocida: `{player_class}`\n"
-                f"Disponibles: {', '.join(sorted(set(all_names)))}\n"
-                f"O definilas con: `edit clases: Foo, Bar` en /setup"
+                t("cmd_join_unknown_class", player_class=player_class, classes=', '.join(sorted(set(all_names))))
             )
             return
 
@@ -1351,11 +1302,11 @@ async def cmd_join(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             sync_chatstate_to_state(cs.active_campaign, cs)
 
         await update.message.reply_text(
-            f"✅ Character Joined!\n\n{_fmt_character(char)}",
+            t("cmd_join_success", character_sheet=_fmt_character(char)),
         )
     except Exception as e:
         log.exception("cmd_join error")
-        await update.message.reply_text(f"Error joining: {e}")
+        await update.message.reply_text(t("cmd_join_error", e=str(e)))
 
 
 @with_audit("cmd_roll")
@@ -1385,7 +1336,7 @@ async def cmd_roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 rage_bonus=attack.get("rage_bonus", 0),
             )
 
-            note = f"🎯 *Attack Result*\n{resolved['note']}"
+            note = t("roll_attack_result", note=resolved['note'])
             if resolved["hit"] and resolved["damage"] > 0:
                 # Apply damage to DEFENDER (not attacker)
                 defender_name = attack["defender_name"]
@@ -1403,23 +1354,18 @@ async def cmd_roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                         stabilized, dead = ds.roll()
                         ds_status = f"successes={ds.successes}/3 failures={ds.failures}/3"
                         if dead:
-                            note += f"\n💀 ¡{defender_name} ha MUERTO! {ds_status}"
+                            note += t("roll_character_died", name=defender_name, status=ds_status)
                             defender.hp.current = 0
                         elif stabilized:
-                            note += f"\n✨ ¡{defender_name} se ha ESTABILIZADO! {ds_status}"
+                            note += t("roll_character_stabilized", name=defender_name, status=ds_status)
                             defender.hp.current = 1
                         else:
-                            note += f"\n🫀 Death save: {ds_status}"
+                            note += t("roll_death_save_status", status=ds_status)
                     # ── TPK Detection: check if all party members dead ──────────
                     all_members = [c for c in cs.characters.values() if hasattr(c, "hp") and c.hp]
                     all_dead = all(c.hp.current <= 0 for c in all_members) if all_members else False
                     if all_dead and len(all_members) > 0:
-                        note += (
-                            "\n\n☠️ *¡TOTAL PARTY KILL!*\n"
-                            "Todos los miembros del party han caído...\n"
-                            "La campaña ha terminado.\n\n"
-                            "Usá /end para cerrar la campaña o /resume para intentar de nuevo."
-                        )
+                        note += t("roll_tpk_message")
                         # End combat if still active
                         if cs.combat_state and cs.combat_state.active:
                             try:
@@ -1438,7 +1384,7 @@ async def cmd_roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                             e = enemies[defender_name]
                             e["hp_current"] = max(0, e["hp_current"] - dmg)
                             if e["hp_current"] == 0:
-                                note += f"\n\U0001f480 {defender_name} derrotado!"
+                                note += t("roll_enemy_defeated", name=defender_name)
                             else:
                                 note += f"\n\u2694\ufe0f {dmg} dmg a {defender_name} (HP: {e['hp_current']}/{e['hp_max']})"
                         else:
@@ -1465,7 +1411,7 @@ async def cmd_roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     location=location,
                 )
                 if narrative:
-                    note += f"\n\n📝 {narrative}"
+                    note += t("roll_narrative_addition", narrative=narrative)
 
             chat_data["_hermes_state"] = cs
             await update.message.reply_text(note, parse_mode=ParseMode.MARKDOWN)
@@ -1487,7 +1433,7 @@ async def cmd_roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 spell_data=spell_info["spell_data"],
             )
 
-            note = f"✨ *Spell Result*\n{spell_result['note']}"
+            note = t("roll_spell_result", note=spell_result['note'])
 
             # ── LLM narrative for spell casting ──
             narrator = get_narrator()
@@ -1560,7 +1506,7 @@ async def cmd_roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     if skill_narrative:
                         note += f"\n\n📝 {skill_narrative}"
             else:
-                note = f"Unknown skill: {check_info['skill']}"
+                note = t("roll_unknown_skill", skill=check_info['skill'])
 
             chat_data["_hermes_state"] = cs
             await update.message.reply_text(note, parse_mode=ParseMode.MARKDOWN)
@@ -1605,11 +1551,11 @@ async def cmd_roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 parse_mode=ParseMode.MARKDOWN,
             )
         except Exception as roll_err:
-            await update.message.reply_text(f"Roll error: {roll_err}")
+            await update.message.reply_text(t("roll_error", roll_err=str(roll_err)))
 
     except Exception as e:
         log.exception("cmd_roll error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 @with_audit("cmd_attack")
@@ -1619,8 +1565,7 @@ async def cmd_attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         args = context.args
         if not args:
             await update.message.reply_text(
-                "Usage: /attack <target_name> [adv|dis]\n"
-                "Then use /roll to resolve the attack."
+                t("cmd_attack_usage")
             )
             return
 
@@ -1640,7 +1585,7 @@ async def cmd_attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
         if char is None:
             await update.message.reply_text(
-                "No character found. Use /join to create one first."
+                t("no_character_found")
             )
             return
 
@@ -1675,7 +1620,7 @@ async def cmd_attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 round_num = cs.combat_state.round
                 bar = "█" * 10
                 msg = await update.message.reply_text(
-                    f"⏱️ Turno de *{current}* — Round {round_num}\n`[{bar}] {timer_seconds}s`",
+                    t("combat_turn_countdown", character=current, round=round_num, bar=bar, seconds=timer_seconds),
                     parse_mode=ParseMode.MARKDOWN,
                 )
                 cs.countdown_message_id = msg.message_id
@@ -1716,7 +1661,7 @@ async def cmd_attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 cs.combat_state = None
                 chat_data["_hermes_state"] = cs
                 await update.message.reply_text(
-                    f"Combat ended: {result.get('error', 'No combatants')}"
+                    t("combat_ended", reason=result.get('error', 'No combatants'))
                 )
                 return
 
@@ -1728,7 +1673,7 @@ async def cmd_attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 round_num = cs.combat_state.round
                 bar = "█" * 10
                 msg = await update.message.reply_text(
-                    f"⏱️ Turno de *{next_char}* — Round {round_num}\n`[{bar}] {timer_seconds}s`",
+                    t("combat_turn_countdown", character=next_char, round=round_num, bar=bar, seconds=timer_seconds),
                     parse_mode=ParseMode.MARKDOWN,
                 )
                 cs.countdown_message_id = msg.message_id
@@ -1751,9 +1696,7 @@ async def cmd_attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
         adv_note = " (ADV)" if advantage else (" (DIS)" if disadvantage else "")
         await update.message.reply_text(
-            f"⚔️ *Attack queued*\n"
-            f"{attacker_name} attacks {target}{adv_note} with {weapon}.\n"
-            f"Use /roll <dice> (e.g. /roll d20+5) to resolve." + combat_started_msg,
+            t("cmd_attack_queued", attacker=attacker_name, target=target, adv_note=adv_note, weapon=weapon, combatStarted=combat_started_msg),
             parse_mode=ParseMode.MARKDOWN,
         )
 
@@ -1764,7 +1707,7 @@ async def cmd_attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     except Exception as e:
         log.exception("cmd_attack error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 @with_audit("cmd_cast")
@@ -1785,8 +1728,7 @@ async def cmd_cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             else:
                 spell_list = ", ".join(spell_mgr.SPELLS.keys())
             await update.message.reply_text(
-                f"Usage: /cast <spell_name> [target]\n\n"
-                f"{spell_list}",
+                t("cmd_cast_usage", spell_list=spell_list),
                 parse_mode=ParseMode.MARKDOWN,
             )
             return
@@ -1797,8 +1739,7 @@ async def cmd_cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # Validate spell exists
         if spell_name not in spell_mgr.SPELLS:
             await update.message.reply_text(
-                f"Unknown spell: `{spell_name}`\n"
-                f"Available: {', '.join(spell_mgr.SPELLS.keys())}"
+                t("cmd_cast_unknown_spell", spell_name=spell_name, spells=', '.join(spell_mgr.SPELLS.keys()))
             )
             return
 
@@ -1812,7 +1753,7 @@ async def cmd_cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         if char is None:
             await update.message.reply_text(
-                "No character found. Use /join to create one first."
+                t("no_character_found")
             )
             return
 
@@ -1844,7 +1785,7 @@ async def cmd_cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 round_num = cs.combat_state.round
                 bar = "█" * 10
                 msg = await update.message.reply_text(
-                    f"⏱️ Turno de *{next_char}* — Round {round_num}\n`[{bar}] {timer_seconds}s`",
+                    t("combat_turn_countdown", character=next_char, round=round_num, bar=bar, seconds=timer_seconds),
                     parse_mode=ParseMode.MARKDOWN,
                 )
                 cs.countdown_message_id = msg.message_id
@@ -1875,7 +1816,7 @@ async def cmd_cast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     except Exception as e:
         log.exception("cmd_cast error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 @with_audit("cmd_skill")
@@ -1885,8 +1826,7 @@ async def cmd_skill(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         args = context.args
         if len(args) < 2:
             await update.message.reply_text(
-                "Usage: /skill <skill_name> <dc> [adv|dis]\n"
-                f"Skills: {', '.join(sorted(ALL_SKILLS))}"
+                t("cmd_skill_usage", skills=', '.join(sorted(ALL_SKILLS)))
             )
             return
 
@@ -1894,7 +1834,7 @@ async def cmd_skill(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             dc = int(args[1])
         except ValueError:
-            await update.message.reply_text(f"Invalid DC: `{args[1]}`")
+            await update.message.reply_text(t("cmd_skill_invalid_dc", dc=args[1]))
             return
 
         advantage = "adv" in args
@@ -1910,12 +1850,12 @@ async def cmd_skill(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         if char is None:
             await update.message.reply_text(
-                "No character found. Use /join to create one first."
+                t("no_character_found")
             )
             return
 
         if skill not in ALL_SKILLS:
-            await update.message.reply_text(f"Unknown skill: `{skill}`")
+            await update.message.reply_text(t("cmd_skill_unknown_skill", skill=skill))
             return
 
         cs.pending_skill_check = {
@@ -1951,7 +1891,7 @@ async def cmd_skill(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 round_num = cs.combat_state.round
                 bar = "█" * 10
                 msg = await update.message.reply_text(
-                    f"⏱️ Turno de *{next_char}* — Round {round_num}\n`[{bar}] {timer_seconds}s`",
+                    t("combat_turn_countdown", character=next_char, round=round_num, bar=bar, seconds=timer_seconds),
                     parse_mode=ParseMode.MARKDOWN,
                 )
                 cs.countdown_message_id = msg.message_id
@@ -1973,14 +1913,12 @@ async def cmd_skill(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 )
 
         await update.message.reply_text(
-            f"🎲 *Skill Check Queued*\n"
-            f"{char.name} attempts *{skill}* vs DC {dc}.\n"
-            f"Use /roll to resolve.",
+            t("cmd_skill_queued", character=char.name, skill=skill, dc=dc),
             parse_mode=ParseMode.MARKDOWN,
         )
     except Exception as e:
         log.exception("cmd_skill error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 @with_audit("cmd_status")
@@ -1992,11 +1930,11 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
         if not cs.characters:
             await update.message.reply_text(
-                "No characters in this campaign. Use /join to add one."
+                t("cmd_status_no_characters")
             )
             return
 
-        lines = ["*Party Status*\n"]
+        lines = [t("cmd_status_header")]
         for char in cs.characters.values():
             hp_line = f"{char.hp.current}/{char.hp.max}" + (
                 f" (+{char.hp.temp} temp)" if char.hp.temp > 0 else ""
@@ -2007,13 +1945,13 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             )
 
         combat = _fmt_combat_summary(cs.combat_state)
-        if combat != "No active combat.":
+        if combat != t("combat_no_active"):
             lines.append(f"\n{combat}")
 
         await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
         log.exception("cmd_status error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 @with_audit("cmd_hp")
@@ -2030,7 +1968,7 @@ async def cmd_hp(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         if char is None:
             await update.message.reply_text(
-                "No character found. Use /join to create one first."
+                t("no_character_found")
             )
             return
 
@@ -2056,7 +1994,7 @@ async def cmd_hp(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
     except Exception as e:
         log.exception("cmd_hp error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 @with_audit("cmd_inventory")
@@ -2073,7 +2011,7 @@ async def cmd_inventory(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         if char is None:
             await update.message.reply_text(
-                "No character found. Use /join to create one first."
+                t("no_character_found")
             )
             return
 
@@ -2112,7 +2050,7 @@ async def cmd_inventory(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
     except Exception as e:
         log.exception("cmd_inventory error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 @with_audit("cmd_give")
@@ -2122,10 +2060,7 @@ async def cmd_give(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         args = context.args
         if len(args) < 2:
             await update.message.reply_text(
-                "🎁 *Transferencia de item*\n\n"
-                "Uso: /give <personaje> <item> [cantidad]\n"
-                "Ejemplo: /give Valdric Espada Larga\n"
-                "Usa /inventory para ver tu inventario."
+                t("cmd_give_usage")
             )
             return
 
@@ -2134,7 +2069,7 @@ async def cmd_give(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         if not cs.active_campaign:
             await update.message.reply_text(
-                "⚠️ No hay campaña activa. Usa /newgame primero."
+                t("cmd_give_no_campaign")
             )
             return
 
@@ -2149,8 +2084,7 @@ async def cmd_give(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if receiver_char is None:
             available = ", ".join(c.name for c in cs.characters.values())
             await update.message.reply_text(
-                f"⚠️ Personaje '{receiver_name}' no encontrado en la party.\n"
-                f"Disponibles: {available}"
+                t("cmd_give_character_not_found", name=receiver_name, available=available)
             )
             return
 
@@ -2167,7 +2101,7 @@ async def cmd_give(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         if giver_char is None:
             await update.message.reply_text(
-                "⚠️ No se encontró tu personaje. Usa /join para registrarte."
+                t("cmd_give_giver_not_found")
             )
             return
 
@@ -2183,8 +2117,7 @@ async def cmd_give(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         if not item_name:
             await update.message.reply_text(
-                "⚠️ Debes especificar qué item quieres dar.\n"
-                "Ejemplo: /give Valdric Espada Larga"
+                t("cmd_give_no_item")
             )
             return
 
@@ -2197,23 +2130,20 @@ async def cmd_give(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         if item_found is None:
             await update.message.reply_text(
-                f"⚠️ No tienes '{item_name}' en tu inventario.\n"
-                "Usa /inventory para ver tus items."
+                t("cmd_give_dont_have_item", item=item_name)
             )
             return
 
         if item_found.quantity < qty:
             await update.message.reply_text(
-                f"⚠️ Solo tienes {item_found.quantity}x '{item_found.name}'.\n"
-                f"No puedes dar {qty}."
+                t("cmd_give_insufficient_quantity", qty=item_found.quantity, name=item_found.name, requested=qty)
             )
             return
 
         # Check receiver inventory slots
         if len(receiver_char.inventory) >= receiver_char.inventory_slots:
             await update.message.reply_text(
-                f"⚠️ El inventario de {receiver_char.name} está lleno "
-                f"({receiver_char.inventory_slots}/{receiver_char.inventory_slots})."
+                t("cmd_give_inventory_full", receiver=receiver_char.name, slots=receiver_char.inventory_slots)
             )
             return
 
@@ -2237,16 +2167,13 @@ async def cmd_give(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             item_label += f" — _{item_found.description[:40]}_"
 
         await update.message.reply_text(
-            f"🎁 *Transferencia realizada*\n\n"
-            f"{giver_char.name} le da {item_label} a {receiver_char.name}.\n"
-            f"Inventario de {giver_char.name}: {len(giver_char.inventory)}/{giver_char.inventory_slots}\n"
-            f"Inventario de {receiver_char.name}: {len(receiver_char.inventory)}/{receiver_char.inventory_slots}",
+            t("cmd_give_success", giver=giver_char.name, receiver=receiver_char.name, item=item_label, giver_used=len(giver_char.inventory), giver_max=giver_char.inventory_slots, receiver_used=len(receiver_char.inventory), receiver_max=receiver_char.inventory_slots),
             parse_mode=ParseMode.MARKDOWN,
         )
 
     except Exception as e:
         log.exception("cmd_give error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 @with_audit("cmd_talk")
@@ -2256,8 +2183,7 @@ async def cmd_talk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         args = context.args
         if len(args) < 2:
             await update.message.reply_text(
-                "Usage: /talk <npc_name> <message>\n"
-                "Use /campaign to see available NPCs."
+                t("cmd_talk_usage")
             )
             return
 
@@ -2268,12 +2194,12 @@ async def cmd_talk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         cs: ChatState = chat_data.get("_hermes_state", ChatState())
 
         if not cs.active_campaign:
-            await update.message.reply_text("No active campaign. Use /newgame first.")
+            await update.message.reply_text(t("cmd_talk_no_campaign"))
             return
 
         state = load_state(cs.active_campaign)
         if state is None:
-            await update.message.reply_text("Campaign not found.")
+            await update.message.reply_text(t("campaign_not_found"))
             return
 
         npc_key = None
@@ -2288,7 +2214,7 @@ async def cmd_talk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if npc_key is None:
             npc_list = ", ".join(n["name"] for n in state.get("npcs", {}).values())
             await update.message.reply_text(
-                f"NPC not found. Available: {npc_list or 'none'}"
+                t("cmd_talk_npc_not_found", npcs=npc_list or 'none')
             )
             return
 
@@ -2372,7 +2298,7 @@ async def cmd_talk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(reply, parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
         log.exception("cmd_talk error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 # ── NPC Commands ───────────────────────────────────────────────────────────────
@@ -2389,7 +2315,7 @@ async def cmd_npcs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_data = context.chat_data
         cs: ChatState = chat_data.get("_hermes_state", ChatState())
         if not cs.active_campaign:
-            await update.message.reply_text("No active campaign.")
+            await update.message.reply_text(t("no_active_campaign"))
             return
 
         store = _get_npc_store(cs.active_campaign)
@@ -2397,7 +2323,7 @@ async def cmd_npcs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(result, parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
         log.exception("cmd_npcs error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 async def cmd_npcsearch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2405,20 +2331,20 @@ async def cmd_npcsearch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     try:
         args = context.args
         if not args:
-            await update.message.reply_text("Usage: /npcsearch <query>")
+            await update.message.reply_text(t("cmd_npcsearch_usage"))
             return
 
         query = " ".join(args)
         chat_data = context.chat_data
         cs: ChatState = chat_data.get("_hermes_state", ChatState())
         if not cs.active_campaign:
-            await update.message.reply_text("No active campaign.")
+            await update.message.reply_text(t("no_active_campaign"))
             return
 
         store = _get_npc_store(cs.active_campaign)
         results = store.search(query)
         if not results:
-            await update.message.reply_text(f"No NPCs found matching: {query}")
+            await update.message.reply_text(t("cmd_npcsearch_no_results", query=query))
             return
 
         lines = [f"**NPCs matching \"{query}\"**\n"]
@@ -2430,7 +2356,7 @@ async def cmd_npcsearch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
         log.exception("cmd_npcsearch error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 async def cmd_npcnote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2439,8 +2365,7 @@ async def cmd_npcnote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         args = context.args
         if len(args) < 2:
             await update.message.reply_text(
-                "Usage: /npcnote <npc_name> <note text>\n"
-                "Example: /npcnote Gorin He betrayed the party last session."
+                t("cmd_npcnote_usage")
             )
             return
 
@@ -2449,13 +2374,13 @@ async def cmd_npcnote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         chat_data = context.chat_data
         cs: ChatState = chat_data.get("_hermes_state", ChatState())
         if not cs.active_campaign:
-            await update.message.reply_text("No active campaign.")
+            await update.message.reply_text(t("no_active_campaign"))
             return
 
         store = _get_npc_store(cs.active_campaign)
         npc = store.find_by_name(npc_name)
         if not npc:
-            await update.message.reply_text(f"NPC '{npc_name}' not found. Use /npcs to see all NPCs.")
+            await update.message.reply_text(t("cmd_npcnote_not_found", name=npc_name))
             return
 
         npc.notes = note
@@ -2464,13 +2389,12 @@ async def cmd_npcnote(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         save_npc_store(cs.active_campaign, store)
 
         await update.message.reply_text(
-            f"Note saved for **{npc.name}**.\n"
-            f"_Note: {note}_",
+            t("cmd_npcnote_saved", name=npc.name, note=note),
             parse_mode=ParseMode.MARKDOWN,
         )
     except Exception as e:
         log.exception("cmd_npcnote error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 async def cmd_npcmemory(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2479,8 +2403,7 @@ async def cmd_npcmemory(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         args = context.args
         if len(args) < 3:
             await update.message.reply_text(
-                "Usage: /npcmemory <npc_name> <key> <value>\n"
-                "Example: /npcmemory Gorin secret_weakness Afraid of fire"
+                t("cmd_npcmemory_usage")
             )
             return
 
@@ -2490,14 +2413,14 @@ async def cmd_npcmemory(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         chat_data = context.chat_data
         cs: ChatState = chat_data.get("_hermes_state", ChatState())
         if not cs.active_campaign:
-            await update.message.reply_text("No active campaign.")
+            await update.message.reply_text(t("no_active_campaign"))
             return
 
         player = update.effective_user.first_name
         store = _get_npc_store(cs.active_campaign)
         npc = store.find_by_name(npc_name)
         if not npc:
-            await update.message.reply_text(f"NPC '{npc_name}' not found. Use /npcs to see all NPCs.")
+            await update.message.reply_text(t("cmd_npcnote_not_found", name=npc_name))
             return
 
         npc.add_memory(key, value, added_by=player)
@@ -2506,13 +2429,12 @@ async def cmd_npcmemory(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         save_npc_store(cs.active_campaign, store)
 
         await update.message.reply_text(
-            f"Memory added to **{npc.name}**.\n"
-            f"**{key}**: {value}",
+            t("cmd_npcmemory_added", name=npc.name, key=key, value=value),
             parse_mode=ParseMode.MARKDOWN,
         )
     except Exception as e:
         log.exception("cmd_npcmemory error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 @with_audit("cmd_map")
@@ -2523,12 +2445,12 @@ async def cmd_map(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         cs: ChatState = chat_data.get("_hermes_state", ChatState())
 
         if not cs.active_campaign:
-            await update.message.reply_text("No active campaign. Use /newgame first.")
+            await update.message.reply_text(t("cmd_map_no_campaign"))
             return
 
         state = load_state(cs.active_campaign)
         if state is None:
-            await update.message.reply_text("Campaign not found.")
+            await update.message.reply_text(t("campaign_not_found"))
             return
 
         location = state["campaign"].get("current_location", "Unknown")
@@ -2559,7 +2481,7 @@ async def cmd_map(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
         log.exception("cmd_map error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 @with_audit("cmd_quests")
@@ -2570,12 +2492,12 @@ async def cmd_quests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         cs: ChatState = chat_data.get("_hermes_state", ChatState())
 
         if not cs.active_campaign:
-            await update.message.reply_text("No active campaign. Use /newgame first.")
+            await update.message.reply_text(t("cmd_quests_no_campaign"))
             return
 
         state = load_state(cs.active_campaign)
         if state is None:
-            await update.message.reply_text("Campaign not found.")
+            await update.message.reply_text(t("campaign_not_found"))
             return
 
         active = state.get("quests", {}).get("active", [])
@@ -2597,7 +2519,7 @@ async def cmd_quests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
         log.exception("cmd_quests error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 @with_audit("cmd_recap")
@@ -2608,20 +2530,20 @@ async def cmd_recap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         cs: ChatState = chat_data.get("_hermes_state", ChatState())
 
         if not cs.active_campaign:
-            await update.message.reply_text("No active campaign. Use /newgame first.")
+            await update.message.reply_text(t("cmd_recap_no_campaign"))
             return
 
         state = load_state(cs.active_campaign)
         if state is None:
-            await update.message.reply_text("Campaign not found.")
+            await update.message.reply_text(t("campaign_not_found"))
             return
 
         history = state.get("history", [])
         if not history:
-            await update.message.reply_text("No story history yet.")
+            await update.message.reply_text(t("cmd_recap_no_history"))
             return
 
-        lines = ["*Story Recap*\n"]
+        lines = [t("cmd_recap_header")]
         for entry in history[-10:]:  # last 10 entries
             event = entry.get("event", str(entry))
             session = entry.get("session", "?")
@@ -2630,7 +2552,7 @@ async def cmd_recap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
         log.exception("cmd_recap error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 @with_audit("cmd_resume")
@@ -2647,7 +2569,7 @@ async def cmd_resume(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             campaigns = list_campaigns()
             if not campaigns:
                 await update.message.reply_text(
-                    "No campaigns found. Use /newgame to create one."
+                    t("cmd_resume_no_campaigns")
                 )
                 return
             latest = campaigns[0]
@@ -2655,12 +2577,12 @@ async def cmd_resume(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             state = load_state(cs.active_campaign)
 
         if state is None:
-            await update.message.reply_text("Campaign not found.")
+            await update.message.reply_text(t("campaign_not_found"))
             return
 
         camp = state["campaign"]
         lines = [
-            "*Campaign Resumed*\n",
+            t("cmd_resume_header"),
             f"*{camp['name']}* ({camp['setting']})\n",
             f"Location: {camp.get('current_location', 'Unknown')}\n",
             f"World: {state['world'].get('main_threat', 'Unknown threat')}\n",
@@ -2674,7 +2596,7 @@ async def cmd_resume(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
         log.exception("cmd_resume error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 @with_audit("cmd_endturn")
@@ -2692,7 +2614,7 @@ async def cmd_spells(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             char = list(cs.characters.values())[0]
 
         if char is None:
-            await update.message.reply_text("No character found. Use /join first.")
+            await update.message.reply_text(t("no_character_found_join"))
             return
 
         # Check if character has spellbook
@@ -2704,12 +2626,12 @@ async def cmd_spells(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             # Show basic spell list from spell_manager
             spell_list = spell_mgr.format_spell_list(char)
             await update.message.reply_text(
-                f"📖 **Spells** ({char.player_class.title()})\n\n{spell_list}",
+                t("cmd_spells_header", cls=char.player_class.title(), spell_list=spell_list),
                 parse_mode=ParseMode.MARKDOWN,
             )
     except Exception as e:
         log.exception("cmd_spells error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 # ── Level 3: /prepare command ─────────────────────────────────────────────
@@ -2724,16 +2646,16 @@ async def cmd_prepare(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             char = list(cs.characters.values())[0]
 
         if char is None:
-            await update.message.reply_text("No character found. Use /join first.")
+            await update.message.reply_text(t("no_character_found_join"))
             return
 
         spellbook = getattr(char, 'spellbook', None)
         if not spellbook:
-            await update.message.reply_text("Your class doesn't use spell preparation.")
+            await update.message.reply_text(t("cmd_prepare_not_prepared_caster"))
             return
 
         if not spellbook.is_prepared_caster():
-            await update.message.reply_text("Your class doesn't require preparation. All known spells are always available.")
+            await update.message.reply_text(t("cmd_prepare_all_known_available"))
             return
 
         args = context.args
@@ -2752,19 +2674,19 @@ async def cmd_prepare(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 break
 
         if found_level is None:
-            await update.message.reply_text(f"Spell '{spell_name}' not in your spellbook.")
+            await update.message.reply_text(t("cmd_prepare_not_in_spellbook", spell=spell_name))
             return
 
         success = spellbook.prepare_spell(spell_name, found_level)
         if success:
-            await update.message.reply_text(f"\u2705 Prepared **{spell_name.title()}** (Level {found_level})")
+            await update.message.reply_text(t("cmd_prepare_success", spell=spell_name.title(), level=found_level))
         else:
-            await update.message.reply_text(f"Already prepared or not in spellbook.")
+            await update.message.reply_text(t("cmd_prepare_already_prepared"))
 
         chat_data["_hermes_state"] = cs
     except Exception as e:
         log.exception("cmd_prepare error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 # ── Level 3: /remember command ────────────────────────────────────────────
@@ -2775,12 +2697,12 @@ async def cmd_remember(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         cs: ChatState = chat_data.get("_hermes_state", ChatState())
 
         if not cs.active_campaign:
-            await update.message.reply_text("No active campaign.")
+            await update.message.reply_text(t("no_active_campaign"))
             return
 
         state = load_state(cs.active_campaign)
         if state is None:
-            await update.message.reply_text("Campaign not found.")
+            await update.message.reply_text(t("campaign_not_found"))
             return
 
         args = context.args
@@ -2807,7 +2729,7 @@ async def cmd_remember(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await update.message.reply_text(display, parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
         log.exception("cmd_remember error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 # ── Level 3: /disengage command ───────────────────────────────────────────
@@ -2822,21 +2744,20 @@ async def cmd_disengage(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             char = list(cs.characters.values())[0]
 
         if char is None:
-            await update.message.reply_text("No character found.")
+            await update.message.reply_text(t("no_character_found"))
             return
 
         if cs.combat_state and cs.combat_state.active:
             char.has_disengaged = True
             chat_data["_hermes_state"] = cs
             await update.message.reply_text(
-                f"\U0001f6e1 **{char.name}** takes the **Disengage** action.\n"
-                f"No opportunity attacks until your next turn."
+                t("cmd_disengage_taken", name=char.name)
             )
         else:
-            await update.message.reply_text("Disengage is a combat action. Start combat first.")
+            await update.message.reply_text(t("cmd_disengage_not_in_combat"))
     except Exception as e:
         log.exception("cmd_disengage error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 async def cmd_endturn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2846,7 +2767,7 @@ async def cmd_endturn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         cs: ChatState = chat_data.get("_hermes_state", ChatState())
 
         if cs.combat_state is None or not cs.combat_state.active:
-            await update.message.reply_text("No active combat. Start one with /attack.")
+            await update.message.reply_text(t("cmd_endturn_no_combat"))
             return
 
         job_queue = getattr(context.application, "job_queue", None)
@@ -2884,7 +2805,7 @@ async def cmd_endturn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 cs.combat_state = None
                 chat_data["_hermes_state"] = cs
                 await update.message.reply_text(
-                    f"Combat ended: {result.get('error', 'No combatants')}"
+                    t("combat_ended", reason=result.get('error', 'No combatants'))
                 )
                 return
 
@@ -2894,7 +2815,7 @@ async def cmd_endturn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             # Send new countdown
             bar = "█" * 10
             msg = await update.message.reply_text(
-                f"⏱️ Turno de *{next_char}* — Round {round_num}\n`[{bar}] {timer_seconds}s`",
+                t("combat_turn_countdown", character=next_char, round=round_num, bar=bar, seconds=timer_seconds),
                 parse_mode=ParseMode.MARKDOWN,
             )
 
@@ -2922,7 +2843,7 @@ async def cmd_endturn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 cs.combat_state = None
                 chat_data["_hermes_state"] = cs
                 await update.message.reply_text(
-                    f"Combat ended: {result.get('error', 'No combatants')}"
+                    t("combat_ended", reason=result.get('error', 'No combatants'))
                 )
                 return
             chat_data["_hermes_state"] = cs
@@ -2931,7 +2852,7 @@ async def cmd_endturn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     except Exception as e:
         log.exception("cmd_endturn error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 async def cmd_campaign(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2941,12 +2862,12 @@ async def cmd_campaign(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         cs: ChatState = chat_data.get("_hermes_state", ChatState())
 
         if not cs.active_campaign:
-            await update.message.reply_text("No active campaign. Use /newgame first.")
+            await update.message.reply_text(t("cmd_campaign_no_campaign"))
             return
 
         state = load_state(cs.active_campaign)
         if state is None:
-            await update.message.reply_text("Campaign not found.")
+            await update.message.reply_text(t("campaign_not_found"))
             return
 
         camp = state["campaign"]
@@ -2980,7 +2901,7 @@ async def cmd_campaign(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
         log.exception("cmd_campaign error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 # -----------------------------------------------------------------------
@@ -3005,20 +2926,20 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         if not cs.active_campaign:
             await update.message.reply_text(
-                "No hay campaña activa. Usa /setup para crear una.",
+                t("cmd_start_no_campaign"),
             )
             return
 
         state = load_state(cs.active_campaign)
         if state is None:
-            await update.message.reply_text("Campaña no encontrada.")
+            await update.message.reply_text(t("campaign_not_found"))
             return
 
         # Verify campaign is active
         campaign_status = state.get("campaign", {}).get("status", "pending")
         if campaign_status == "completed":
             await update.message.reply_text(
-                "Esta campaña ya terminó. Usa /newgame para crear una nueva.",
+                t("cmd_start_already_completed"),
             )
             return
 
@@ -3026,7 +2947,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         characters = state.get("characters", {})
         if not characters:
             await update.message.reply_text(
-                "Aún no hay jugadores en la party. Usa /join para registrar tu personaje.",
+                t("cmd_start_no_players"),
             )
             return
 
@@ -3058,16 +2979,13 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         party_names = ", ".join(c.get("name", n) for n, c in characters.items())
 
         await update.message.reply_text(
-            f"🎭 *¡LA AVENTURA COMIENZA!*\n\n"
-            f"_{opening_text}_\n\n"
-            f"👥 Party: {party_names}\n\n"
-            f"¿Qué hacen los aventureros?",
+            t("cmd_start_adventure_begins", narrative=opening_text, party=party_names),
             parse_mode=ParseMode.MARKDOWN,
         )
 
     except Exception as e:
         log.exception("cmd_start error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 # -----------------------------------------------------------------------
@@ -3155,13 +3073,13 @@ async def cmd_startcombat(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         if not cs.characters:
             await update.message.reply_text(
-                "⚠️ No hay personajes registrados. Usa /join primero."
+                t("cmd_startcombat_no_characters")
             )
             return
 
         if cs.combat_state is not None and cs.combat_state.active:
             await update.message.reply_text(
-                "⚔️ Ya hay combate activo. Usa /endcombat para terminarlo primero."
+                t("cmd_startcombat_already_active")
             )
             return
 
@@ -3184,7 +3102,7 @@ async def cmd_startcombat(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             # Send countdown message
             bar = "█" * 10
             msg = await update.message.reply_text(
-                f"⏱️ Turno de *{current}* — Round {round_num}\n`[{bar}] {timer_seconds}s`",
+                t("combat_turn_countdown", character=current, round=round_num, bar=bar, seconds=timer_seconds),
                 parse_mode=ParseMode.MARKDOWN,
             )
 
@@ -3208,7 +3126,7 @@ async def cmd_startcombat(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     except Exception as e:
         log.exception("cmd_startcombat error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 async def cmd_endcombat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -3218,7 +3136,7 @@ async def cmd_endcombat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         cs: ChatState = chat_data.get("_hermes_state", ChatState())
 
         if cs.combat_state is None or not cs.combat_state.active:
-            await update.message.reply_text("⚠️ No hay combate activo.")
+            await update.message.reply_text(t("cmd_endcombat_no_combat"))
             return
 
         # Cancel any pending countdown jobs
@@ -3246,29 +3164,26 @@ async def cmd_endcombat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         chat_data["_hermes_state"] = cs
 
         await update.message.reply_text(
-            "🛑 *Combate finalizado.*\nTodos los participantes han salido del modo combate.",
+            t("combat_ended_message"),
             parse_mode=ParseMode.MARKDOWN,
         )
 
     except Exception as e:
         log.exception("cmd_endcombat error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 async def cmd_quit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /quit, /end, /exit — exit DM mode gracefully."""
     try:
         await update.message.reply_text(
-            "👋 *Saliendo del modo DM.*\n\n"
-            "¡Hasta la próxima aventura!\n"
-            "El bot seguirá corriendo en el grupo para recibir comandos.\n"
-            "Usa /newgame o /resume para volver a jugar.",
+            t("cmd_quit_message"),
             parse_mode=ParseMode.MARKDOWN,
         )
     except Exception:
         log.exception("cmd_quit error")
         try:
-            await update.message.reply_text("👋 Hasta la próxima!")
+            await update.message.reply_text(t("cmd_quit_goodbye"))
         except Exception:
             pass
 
@@ -3289,21 +3204,21 @@ async def cmd_end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         if not cs.active_campaign:
             await update.message.reply_text(
-                "⚠️ No hay campaña activa. Usa /newgame para empezar."
+                t("cmd_end_no_campaign")
             )
             return
 
         # Load full state
         state = load_state(cs.active_campaign)
         if state is None:
-            await update.message.reply_text("⚠️ Campaña no encontrada.")
+            await update.message.reply_text(t("campaign_not_found"))
             return
 
         # Check if already completed
         campaign_status = state.get("campaign", {}).get("status", "active")
         if campaign_status == "completed":
             await update.message.reply_text(
-                "⚠️ Esta campaña ya fue completada. Usa /newgame para crear una nueva."
+                t("cmd_end_already_completed")
             )
             return
 
@@ -3311,7 +3226,7 @@ async def cmd_end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ng = _get_narrative_generator()
         closure = ng.generate_closure(state, language=Language.ES)
         campaign_name = state.get("campaign", {}).get("name", "La aventura")
-        epilogue_text = f"🎭 *EPÍLOGO — {campaign_name}*\n\n{closure['narrative']}"
+        epilogue_text = t("cmd_epilogue_header", name=campaign_name, narrative=closure['narrative'])
 
         # Mark campaign as completed
         state["campaign"]["status"] = "completed"
@@ -3348,15 +3263,14 @@ async def cmd_end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_data["_hermes_state"] = cs
 
         await update.message.reply_text(
-            "✅ *Campaña cerrada exitosamente.*\n\n"
-            "¡Gracias por jugar! Usa /newgame para comenzar una nueva aventura.",
+            t("cmd_end_closed_successfully"),
             parse_mode=ParseMode.MARKDOWN,
         )
 
     except Exception as e:
         log.exception("cmd_end error")
         try:
-            await update.message.reply_text(f"Error cerrando campaña: {e}")
+            await update.message.reply_text(t("cmd_end_error", e=str(e)))
         except Exception:
             pass
 
@@ -3398,7 +3312,7 @@ async def _closure_image_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
                 await context.bot.send_photo(
                     chat_id=chat_id,
                     photo=f,
-                    caption="🎨 *Cierre de Campaña*\n_Generada automaticamente_",
+                    caption=t("image_campaign_closure"),
                     parse_mode=ParseMode.MARKDOWN,
                 )
     except Exception as e:
@@ -3411,7 +3325,7 @@ async def cmd_audit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # Admin check
         user_id = update.effective_user.id
         if settings.ADMIN_USER_IDS and user_id not in settings.ADMIN_USER_IDS:
-            await update.message.reply_text("⛔ Solo admins pueden ver el audit log.")
+            await update.message.reply_text(t("cmd_audit_admin_only"))
             return
 
         from scripts.audit_viewer import AuditViewer
@@ -3424,7 +3338,7 @@ async def cmd_audit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(report, parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
         log.exception("cmd_audit error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 # ------------------------------------------------------------------
@@ -3502,7 +3416,7 @@ async def _advance_turn_with_countdown(
         expired_character = data["character"]
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"⏰ ¡Tiempo agotado!\n🎯 Turno de *{expired_character}* — pasando al siguiente.",
+            text=t("combat_time_expired", character=expired_character),
             parse_mode=ParseMode.MARKDOWN,
         )
         await asyncio.sleep(0.5)
@@ -3516,7 +3430,7 @@ async def _advance_turn_with_countdown(
         chat_data["_hermes_state"] = cs
         await context.bot.send_message(
             chat_id=chat_id,
-            text="⛔ El combate ha terminado.",
+            text=t("combat_has_ended"),
             parse_mode=ParseMode.MARKDOWN,
         )
         return
@@ -3553,7 +3467,7 @@ async def _advance_turn_with_countdown(
     bar = "█" * 10
     msg = await context.bot.send_message(
         chat_id=chat_id,
-        text=f"⏱️ Turno de *{next_character}* — Round {round_num}\n`[{bar}] {timer_seconds}s`",
+        text=t("combat_turn_countdown", character=next_character, round=round_num, bar=bar, seconds=timer_seconds),
         parse_mode=ParseMode.MARKDOWN,
     )
 
@@ -3636,7 +3550,7 @@ async def _live_countdown_edit(context: ContextTypes.DEFAULT_TYPE) -> None:
         await context.bot.edit_message_text(
             chat_id=chat_id,
             message_id=data["message_id"],
-            text=f"{icon} Turno de *{current_char}* — Round {data['round']}\n`[{bar}] {remaining}s`",
+            text=t("combat_countdown_edit", icon=icon, character=current_char, round=data['round'], bar=bar, remaining=remaining),
             parse_mode=ParseMode.MARKDOWN,
         )
     except Exception:
@@ -3661,7 +3575,7 @@ async def _turn_timer_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
         current_turn = context.job.data.get("current_turn", "alguien")
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"⏰ *¡Tiempo de turno agotado!*\n🎯 Turno de *{current_turn}* — pasando al siguiente.",
+            text=t("combat_turn_time_expired", character=current_turn),
             parse_mode=ParseMode.MARKDOWN,
         )
         # Advance turn — fetch chat_data state and call next_turn
@@ -3674,7 +3588,7 @@ async def _turn_timer_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
                 cs.combat_state = None
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text="⚔️ El combate ha terminado.",
+                    text=t("combat_has_ended_alt"),
                 )
             else:
                 summary = _fmt_combat_summary(cs.combat_state)
@@ -3709,13 +3623,12 @@ async def cmd_imagen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         settings = get_settings(cs.active_campaign)
         if not settings.image_generation:
             await update.message.reply_text(
-                "🎨 *Generación de imágenes desactivada.*\n\n"
-                "Usa `/configuracion imagen on` para activar.",
+                t("cmd_imagen_disabled"),
                 parse_mode=ParseMode.MARKDOWN,
             )
             return
 
-        await update.message.reply_text("🎨 Generando imagen de la escena...")
+        await update.message.reply_text(t("cmd_imagen_generating"))
 
         # Load campaign state for context
         state = load_state(cs.active_campaign)
@@ -3758,22 +3671,21 @@ async def cmd_imagen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
         if image_result is None:
             await update.message.reply_text(
-                "⚠️ No se pudo generar la imagen. "
-                "Los servidores de generación pueden estar saturados. Intentá de nuevo."
+                t("cmd_imagen_failed")
             )
             return
 
         import os as _os
         if not _os.path.exists(image_result.path):
             await update.message.reply_text(
-                "⚠️ La imagen generada no se guardó correctamente."
+                t("cmd_imagen_not_saved")
             )
             return
 
         file_size = _os.path.getsize(image_result.path)
         if file_size < 5000:
             await update.message.reply_text(
-                "⚠️ La imagen generada parece estar corrupta. Intentá de nuevo."
+                t("cmd_imagen_corrupted")
             )
             return
 
@@ -3788,7 +3700,7 @@ async def cmd_imagen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         with open(image_result.path, "rb") as f:
             await update.message.reply_photo(
                 photo=f,
-                caption=f"🎨 *{location or 'Escena'}* — _{provider_name}_",
+                caption=t("cmd_imagen_caption", location=location or 'Escena', provider=provider_name),
                 parse_mode=ParseMode.MARKDOWN,
             )
 
@@ -3813,7 +3725,7 @@ async def cmd_imagen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     except Exception as e:
         log.exception("cmd_imagen error")
         try:
-            await update.message.reply_text(f"Error: {e}")
+            await update.message.reply_text(t("error_generic", e=str(e)))
         except Exception:
             pass
 
@@ -3825,7 +3737,7 @@ async def cmd_shortrest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         chat_data = context.chat_data
         cs: ChatState = chat_data.get("_hermes_state", ChatState())
         if not cs.active_campaign:
-            await update.message.reply_text("No hay campaña activa.")
+            await update.message.reply_text(t("cmd_shortrest_no_campaign"))
             return
 
         tg_id = update.effective_user.id
@@ -3834,14 +3746,13 @@ async def cmd_shortrest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             sender = update.effective_user.first_name or ""
             char = cs.character_for(sender)
         if not char:
-            await update.message.reply_text("No encontré tu personaje. Usa /join primero.")
+            await update.message.reply_text(t("cmd_shortrest_no_character"))
             return
 
         # Check hit dice
         if char.hp.hit_dice_remaining <= 0:
             await update.message.reply_text(
-                f"😴 {char.name} no tiene hit dice disponibles. "
-                "Usa /longrest para descansar largo y recuperarlos."
+                t("cmd_shortrest_no_hit_dice", name=char.name)
             )
             return
 
@@ -3869,16 +3780,13 @@ async def cmd_shortrest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 save_state(cs.active_campaign, st)
 
         await update.message.reply_text(
-            f"🛌 *{char.name} descansa brevemente...*\n"
-            f"\n❤️ +{hp_rec} HP ({hp_now}/{hp_max})"
-            f"\n🎲 Hit dice restantes: {hd_left}"
-            f"{warlock_note}",
+            t("cmd_shortrest_result", name=char.name, hp_rec=hp_rec, hp_now=hp_now, hp_max=hp_max, hd_left=hd_left, warlock_note=warlock_note),
             parse_mode=ParseMode.MARKDOWN,
         )
     except Exception as e:
         log.exception("cmd_shortrest error")
         try:
-            await update.message.reply_text(f"Error: {e}")
+            await update.message.reply_text(t("error_generic", e=str(e)))
         except Exception:
             pass
 
@@ -3889,7 +3797,7 @@ async def cmd_longrest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         chat_data = context.chat_data
         cs: ChatState = chat_data.get("_hermes_state", ChatState())
         if not cs.active_campaign:
-            await update.message.reply_text("No hay campaña activa.")
+            await update.message.reply_text(t("cmd_shortrest_no_campaign"))
             return
 
         tg_id = update.effective_user.id
@@ -3898,7 +3806,7 @@ async def cmd_longrest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             sender = update.effective_user.first_name or ""
             char = cs.character_for(sender)
         if not char:
-            await update.message.reply_text("No encontré tu personaje. Usa /join primero.")
+            await update.message.reply_text(t("cmd_shortrest_no_character"))
             return
 
         # Long rest: full heal + restore hit dice + restore spell slots
@@ -3936,17 +3844,13 @@ async def cmd_longrest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 save_state(cs.active_campaign, st)
 
         await update.message.reply_text(
-            f"🏕️ *{char.name} descansa largamente...*\n"
-            f"\n❤️ {old_hp} → {char.hp.current}/{char.hp.max} HP (recuperación completa)"
-            f"\n🎲 Hit dice restaurados: {hd_rec}"
-            f"\n🔮 Spell slots recuperados"
-            f"\n\n✨ *Recursos renovados!*",
+            t("cmd_longrest_result", name=char.name, old_hp=old_hp, hp_now=char.hp.current, hp_max=char.hp.max, hd_rec=hd_rec),
             parse_mode=ParseMode.MARKDOWN,
         )
     except Exception as e:
         log.exception("cmd_longrest error")
         try:
-            await update.message.reply_text(f"Error: {e}")
+            await update.message.reply_text(t("error_generic", e=str(e)))
         except Exception:
             pass
 
@@ -3963,17 +3867,17 @@ async def cmd_conditions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             sender = update.effective_user.first_name or ""
             char = cs.character_for(sender)
         if not char:
-            await update.message.reply_text("No encontré tu personaje.")
+            await update.message.reply_text(t("cmd_conditions_no_character"))
             return
 
         from dm.conditions import get_condition, get_condition_summary
 
         conditions = getattr(char, 'conditions', [])
         if not conditions:
-            await update.message.reply_text(f"✅ *{char.name}*: sin condiciones activas.")
+            await update.message.reply_text(t("cmd_conditions_no_active", name=char.name))
             return
 
-        lines = [f"📋 *Condiciones de {char.name}:*\n"]
+        lines = [t("cmd_conditions_header", name=char.name)]
         for cond_name in conditions:
             cond = get_condition(cond_name)
             if cond:
@@ -3987,7 +3891,7 @@ async def cmd_conditions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     except Exception as e:
         log.exception("cmd_conditions error")
         try:
-            await update.message.reply_text(f"Error: {e}")
+            await update.message.reply_text(t("error_generic", e=str(e)))
         except Exception:
             pass
 
@@ -4819,7 +4723,7 @@ async def _countdown_edit(context: ContextTypes.DEFAULT_TYPE) -> None:
         await context.bot.edit_message_text(
             chat_id=chat_id,
             message_id=message_id,
-            text=f"⏰ *¡Tiempo agotado!*\n🎯 Turno de *{character}* — pasando al siguiente.",
+            text=t("combat_time_expired_alt", character=character),
             parse_mode=ParseMode.MARKDOWN,
         )
         return
@@ -4914,7 +4818,7 @@ async def cmd_countdown(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     except Exception as e:
         log.exception("cmd_countdown error")
-        await update.message.reply_text(f"Error: {e}")
+        await update.message.reply_text(t("error_generic", e=str(e)))
 
 
 async def cmd_me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -4965,7 +4869,7 @@ async def cmd_me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         log.exception("cmd_me error")
         try:
-            await update.message.reply_text(f"Error: {e}")
+            await update.message.reply_text(t("error_generic", e=str(e)))
         except Exception:
             pass
 

@@ -280,10 +280,10 @@ def generate_setup_with_ai(description: str, tone: str = "serious", setting: str
 
         provider = get_provider()
 
-        _es_system = "Eres un DM creativo de D&D 5e. Generás campañas originales. Nunca repetís el input del usuario. Respondés solo en JSON válido."
-        _en_system = "You are a creative D&D 5e DM. You create original campaigns. You never repeat the user's input. You respond only in valid JSON."
-        _es_close = "No escribas nada más que el JSON."
-        _en_close = "Write nothing else but the JSON."
+        _es_system = "Eres un DM creativo de D&D 5e. Generás campañas originales en español. Nunca repetís el input del usuario. Respondés solo en JSON válido."
+        _en_system = "You are a creative D&D 5e DM. You create original campaigns in English. You never repeat the user's input. You respond only in valid JSON. ALL content must be in English."
+        _es_close = "No escribas nada más que el JSON. Todo debe estar en español."
+        _en_close = "Write nothing else but the JSON. ALL content must be in English."
 
         if language == "es":
             prompt = f"""Eres un DM creativo de D&D 5e con 20 años de experiencia.
@@ -379,6 +379,8 @@ DM IDEA (inspiration only, DO NOT copy):
 {description}
 
 ---
+
+**IMPORTANT: Write ALL content in English. Every field, name, description, and dialogue must be in English.**
 
 Generate a COMPLETE campaign in English. Each field must be original, creative, and specific. No generic text.
 

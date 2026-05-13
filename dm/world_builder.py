@@ -448,7 +448,7 @@ Reglas:
             response = provider.text(
                 fallback_prompt,
                 system="Eres un DM creativo. Generás campañas originales. Respondés solo en JSON.",
-                max_tokens=7500,
+            max_tokens=2000,
                 temperature=0.9,
             )
             raw = response.text.strip()

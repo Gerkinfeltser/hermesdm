@@ -406,7 +406,7 @@ class OpenAICompatibleProvider(LLMClient):
         )
 
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
+            with urllib.request.urlopen(req, timeout=180) as resp:
                 result = json.load(resp)
         except Exception as exc:
             self._log_llm(

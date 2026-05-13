@@ -653,6 +653,8 @@ async def cmd_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
             # Editar mensaje de generando → preview
             preview_text = _format_setup_preview(setup_data)
+            if len(preview_text) > 4000:
+                preview_text = preview_text[:3990] + "\n\n..."
             await gen_msg.edit_text(preview_text, parse_mode=ParseMode.MARKDOWN)
 
             # Pedir aprobación
